@@ -21,6 +21,11 @@ Công cụ chuyên dụng để giải các bài kiểm tra (Tests) tập trung.
 - **Định dạng `answers.txt`**: Mỗi dòng một đáp án theo định dạng `Số câu. Đáp án` (Ví dụ: `1. A`, `2. C`).
 - **Ưu điểm**: Xử lý được các bài test dài, nhiều câu hỏi một cách tự động.
 
+### 4. Chrome/Edge Browser Extension (`EDUX-EXTENSION`) ⭐ [MỚI]
+Tích hợp gộp cả **Slide Brute-force** và **Test Solver** vào tiện ích mở rộng trình duyệt (Manifest V3).
+- **Cơ chế**: Thao tác trực tiếp trên DOM trình duyệt, có giao diện Popup & Floating Widget trên trang web.
+- **Ưu điểm**: Không cần cài đặt Python hay Playwright, sử dụng sẵn phiên đăng nhập của người dùng.
+
 ---
 
 ## 🛠 Cài đặt

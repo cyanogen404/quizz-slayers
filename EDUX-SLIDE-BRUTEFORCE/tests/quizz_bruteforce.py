@@ -1,8 +1,10 @@
 import os
 import random
+import re
 import time
 import tkinter as tk
 import sys
+from typing import Optional
 from PIL import Image, ImageTk
 
 from playwright.sync_api import (
@@ -33,13 +35,35 @@ def safe_is_visible(locator) -> bool:
         return False
 
 
+def safe_is_enabled(locator) -> bool:
+    """is_visible() VÀ is_enabled() đồng thời nuốt lỗi tạm thời."""
+    try:
+        if not locator.is_visible(timeout=500):
+            return False
+        if not locator.is_enabled(timeout=500):
+            return False
+        aria_disabled = locator.get_attribute("aria-disabled", timeout=500)
+        if aria_disabled == "true":
+            return False
+        class_name = locator.get_attribute("class", timeout=500) or ""
+        if "cursor-not-allowed" in class_name and "pointer-events-none" in class_name:
+            return False
+        return True
+    except PlaywrightError:
+        return False
+
+
 def safe_click(locator, timeout: int = ACTION_TIMEOUT_MS) -> bool:
     """Click có auto-wait + nuốt lỗi tạm thời. Trả về True nếu click thành công."""
     try:
         locator.click(timeout=timeout)
         return True
     except PlaywrightError:
-        return False
+        try:
+            locator.click(force=True, timeout=1000)
+            return True
+        except PlaywrightError:
+            return False
 
 
 def safe_goto(page: Page, url: str, attempts: int = 5) -> bool:
@@ -54,6 +78,255 @@ def safe_goto(page: Page, url: str, attempts: int = 5) -> bool:
     return False
 
 
+def get_active_dialog(page: Page):
+    """Lấy container của modal dialog nếu đang hiển thị trên màn hình."""
+    dialog_selectors = [
+        "div[role='dialog']",
+        "div.sm\\:max-w-\\[100\\%\\]",
+        "[aria-modal='true']",
+        "div[data-state='open'][role='dialog']",
+    ]
+    for sel in dialog_selectors:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0 and safe_is_visible(loc.first):
+                return loc.first
+        except PlaywrightError:
+            pass
+    return None
+
+
+def get_dialog_next_page_button(page: Page):
+    """Tìm nút 'Trang sau' bên trong popup quiz (thường có nền xanh lá bg-green-600)."""
+    selectors = [
+        "button.bg-green-600:has-text('Trang sau')",
+        "button[class*='bg-green']:has-text('Trang sau')",
+        "div[role='dialog'] button.bg-green-600",
+        "div.sm\\:max-w-\\[100\\%\\] button.bg-green-600",
+        "div[role='dialog'] button:has-text('Trang sau')",
+        "div.sm\\:max-w-\\[100\\%\\] button:has-text('Trang sau')",
+        "div[role='dialog'] button:has-text('Tiếp tục')",
+        "div[role='dialog'] button:has-text('Hoàn thành')",
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            for i in range(loc.count()):
+                btn = loc.nth(i)
+                if safe_is_enabled(btn):
+                    return btn
+        except PlaywrightError:
+            pass
+
+    dialog = get_active_dialog(page)
+    if dialog:
+        for text in ["Trang sau", "Tiếp tục", "Hoàn thành"]:
+            try:
+                loc = dialog.locator(f"button:has-text('{text}')")
+                for i in range(loc.count()):
+                    btn = loc.nth(i)
+                    if safe_is_enabled(btn):
+                        return btn
+            except PlaywrightError:
+                pass
+
+    return None
+
+
+def get_dialog_retry_button(page: Page):
+    """Tìm nút 'Thử lại' (trong dialog hoặc trên trang)."""
+    selectors = [
+        "div[role='dialog'] button:has-text('Thử lại')",
+        "div.sm\\:max-w-\\[100\\%\\] button:has-text('Thử lại')",
+        "button:has-text('Thử lại')",
+        "button[title*='Thử lại']",
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            for i in range(loc.count()):
+                btn = loc.nth(i)
+                if safe_is_enabled(btn):
+                    return btn
+        except PlaywrightError:
+            pass
+    return None
+
+
+def get_dialog_skip_button(page: Page):
+    """Tìm nút 'Bỏ qua' (đếm ngược tự động chuyển)."""
+    selectors = [
+        "button:has-text('Bỏ qua')",
+        "button[title*='Bỏ qua']",
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            for i in range(loc.count()):
+                btn = loc.nth(i)
+                if safe_is_enabled(btn):
+                    return btn
+        except PlaywrightError:
+            pass
+    return None
+
+
+def get_dialog_next_question_button(page: Page):
+    """Tìm nút 'Câu tiếp theo'."""
+    selectors = [
+        "div[role='dialog'] button:has-text('Câu tiếp theo')",
+        "div.sm\\:max-w-\\[100\\%\\] button:has-text('Câu tiếp theo')",
+        "button:has-text('Câu tiếp theo')",
+        "button[title*='Câu tiếp theo']",
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            for i in range(loc.count()):
+                btn = loc.nth(i)
+                if safe_is_enabled(btn):
+                    return btn
+        except PlaywrightError:
+            pass
+    return None
+
+
+def find_action_button(page: Page, names: list[str], must_be_enabled: bool = True):
+    """Tìm button theo text, title, aria-label hoặc accessible role name (chịu được chế độ icon thu nhỏ).
+    Ưu tiên tìm bên trong dialog trước (nếu có dialog mở), và duyệt qua tất cả elements thay vì chỉ lấy .first."""
+    check_fn = safe_is_enabled if must_be_enabled else safe_is_visible
+
+    dialog = get_active_dialog(page)
+    containers = [dialog, page] if dialog else [page]
+
+    for container in containers:
+        for name in names:
+            if name == "Trang sau":
+                green_btn = container.locator("button.bg-green-600, button[class*='bg-green']")
+                try:
+                    for i in range(green_btn.count()):
+                        btn = green_btn.nth(i)
+                        if check_fn(btn):
+                            return btn
+                except PlaywrightError:
+                    pass
+
+            selectors = [
+                f"button:has-text('{name}')",
+                f"button[title*='{name}']",
+                f"button[aria-label*='{name}']",
+            ]
+            for sel in selectors:
+                loc = container.locator(sel)
+                try:
+                    for i in range(loc.count()):
+                        btn = loc.nth(i)
+                        if check_fn(btn):
+                            return btn
+                except PlaywrightError:
+                    pass
+
+            try:
+                role_loc = container.get_by_role("button", name=name)
+                for i in range(role_loc.count()):
+                    btn = role_loc.nth(i)
+                    if check_fn(btn):
+                        return btn
+            except PlaywrightError:
+                pass
+
+    return None
+
+
+def safe_next_slide(page: Page) -> bool:
+    """Chuyển sang slide tiếp theo: ưu tiên nút 'Trang sau' trong dialog/slide, fallback phím ArrowRight."""
+    dlg_btn = get_dialog_next_page_button(page)
+    if dlg_btn and safe_click(dlg_btn):
+        return True
+
+    next_btn = find_action_button(page, ["Trang sau"], must_be_enabled=True)
+    if next_btn and safe_click(next_btn):
+        return True
+
+    try:
+        page.keyboard.press("ArrowRight")
+        return True
+    except PlaywrightError:
+        return False
+
+
+def get_answers_locator(page: Page):
+    """Tìm danh sách các lựa chọn đáp án theo nhiều tầng fallback để thích ứng với thay đổi layout."""
+    radiogroup_children = page.locator("div[role='radiogroup'] > div")
+    if radiogroup_children.count() > 0 and safe_is_visible(radiogroup_children.first):
+        return radiogroup_children
+
+    choice_cards = page.locator("div.rounded-xl.border-2").filter(
+        has=page.locator("button[role='radio'], span.font-bold")
+    )
+    if choice_cards.count() > 0 and safe_is_visible(choice_cards.first):
+        return choice_cards
+
+    radios = page.locator("button[role='radio']")
+    if radios.count() > 0 and safe_is_visible(radios.first):
+        return radios
+
+    min_h_cards = page.locator("div.border-2.rounded-xl.min-h-\\[80px\\]")
+    if min_h_cards.count() > 0 and safe_is_visible(min_h_cards.first):
+        return min_h_cards
+
+    pointer_cards = page.locator("div.border-2.cursor-pointer")
+    if pointer_cards.count() > 0 and safe_is_visible(pointer_cards.first):
+        return pointer_cards
+
+    return page.locator("div[role='radiogroup'] > div")
+
+
+def get_question_text(page: Page, answers_loc) -> str:
+    """Lấy nội dung câu hỏi một cách linh hoạt, fallback sang vân tay đáp án."""
+    candidates = [
+        page.locator("div.bg-blue-50.border-blue-500").first,
+        page.locator("[class*='text-blue-800']").first,
+        page.locator("div.bg-blue-50").first,
+        page.locator("p.my-3.text-gray-800.leading-relaxed").first,
+        page.locator("div[role='dialog'] h3").first,
+        page.locator("div[role='dialog'] .font-semibold").first,
+    ]
+    for loc in candidates:
+        if safe_is_visible(loc):
+            try:
+                txt = loc.inner_text().strip()
+                if txt:
+                    return txt
+            except PlaywrightError:
+                pass
+
+    return answers_fingerprint(answers_loc) or "?"
+
+
+def extract_revealed_correct_index(page: Page) -> Optional[int]:
+    """Khi trả lời sai, EDUX hiển thị 'Đáp án đúng: X.' trên màn hình.
+    Hàm này bóc tách chữ cái đó để bot lập tức chọn đúng ngay lần thử tiếp theo."""
+    selectors = [
+        "div.text-red-700:has-text('Đáp án đúng:')",
+        "[class*='text-red']:has-text('Đáp án đúng:')",
+        "div:has-text('Đáp án đúng:')",
+        "p:has-text('Đáp án đúng:')",
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0 and safe_is_visible(loc.first):
+                text = loc.first.inner_text()
+                match = re.search(r"Đáp án đúng:\s*([A-Za-z])\b", text)
+                if match:
+                    letter = match.group(1).upper()
+                    return ord(letter) - ord('A')
+        except PlaywrightError:
+            pass
+    return None
+
+
 def answers_fingerprint(answers_locator) -> str:
     """Khoá ghi nhớ dựa trên nội dung các đáp án — dùng khi không lấy được text câu hỏi."""
     try:
@@ -64,16 +337,39 @@ def answers_fingerprint(answers_locator) -> str:
         return ""
 
 
-def log_stall_diagnostics(page: Page, buttons: dict) -> None:
+def log_stall_diagnostics(page: Page) -> None:
     """In ra trạng thái màn hình khi nghi bị kẹt, để biết LÝ DO thay vì im lặng."""
-    visible = [name for name, loc in buttons.items() if safe_is_visible(loc)]
     try:
         url = page.url
     except PlaywrightError:
         url = "?"
+
+    dialog_open = get_active_dialog(page) is not None
+    visible_buttons = []
+    try:
+        all_btns = page.locator("button:visible")
+        for i in range(min(all_btns.count(), 10)):
+            b = all_btns.nth(i)
+            txt = (b.inner_text() or "").strip().replace("\n", " ")
+            title = b.get_attribute("title") or ""
+            enabled = b.is_enabled()
+            cls = (b.get_attribute("class") or "")[:25]
+            desc = f"'{txt or title}'({'enabled' if enabled else 'disabled'}, cls={cls})"
+            visible_buttons.append(desc)
+    except PlaywrightError:
+        pass
+
+    radios_count = 0
+    try:
+        radios_count = page.locator(
+            "button[role='radio'], div[role='radiogroup'] > div, div.rounded-xl.border-2"
+        ).count()
+    except PlaywrightError:
+        pass
+
     print(
-        f"[STALL] Đang chờ (chưa thấy đáp án). "
-        f"Nút đang hiện: {visible or 'không có'} | URL: {url}"
+        f"[STALL DIAG] URL: {url} | Dialog mở: {dialog_open} | "
+        f"Cards/Radio: {radios_count} | Buttons: {', '.join(visible_buttons) or 'không có'}"
     )
 
 
@@ -150,28 +446,8 @@ def test_wait_for_user_login(page: Page) -> None:
     show_start_dialog("Khi bạn thấy màn hình slide, chuyển tới slide đang làm mới nhất và nhấn nút dưới đây để bắt đầu tự động trả lời.")
 
     wrong_answers: dict[str, set[int]] = {}
+    known_correct_answers: dict[str, int] = {}
 
-    no_question_button = page.get_by_role("button", name="Không có câu hỏi")
-    answer_button = page.get_by_role("button", name="Trả lời trên lớp")
-    check_button = page.get_by_role("button", name="Kiểm tra")
-    next_button = page.get_by_role("button", name="Câu tiếp theo")
-    retry_button = page.get_by_role("button", name="Thử lại")
-    next_page_button = page.get_by_role("button", name="Trang sau")
-    question_locator = page.locator("p.my-3.text-gray-800.leading-relaxed").first
-    answers_locator = page.locator(
-        "div.flex.items-center.space-x-6.p-8.rounded-xl.border-2.transition-colors.cursor-pointer.min-h-\\[80px\\]"
-    )
-
-    # Watchdog phát hiện kẹt: nếu quá lâu không thấy đáp án nào để trả lời thì
-    # in chẩn đoán (1 lần mỗi lần kẹt) để biết lý do thay vì dừng im lặng.
-    all_buttons = {
-        "Không có câu hỏi": no_question_button,
-        "Trả lời trên lớp": answer_button,
-        "Kiểm tra": check_button,
-        "Câu tiếp theo": next_button,
-        "Thử lại": retry_button,
-        "Trang sau": next_page_button,
-    }
     last_progress = time.monotonic()
     stall_reported = False
     STALL_SECONDS = 8.0
@@ -181,107 +457,289 @@ def test_wait_for_user_login(page: Page) -> None:
         # điều hướng, element detach do re-render) chỉ làm bỏ qua 1 vòng rồi thử
         # lại, KHÔNG làm sập cả script.
         try:
-            if safe_is_visible(no_question_button):
-                safe_click(next_page_button)
-                print("[INFO] Next Page (No Question)")
-                try: no_question_button.wait_for(state="hidden", timeout=1000)
-                except PlaywrightError: pass
-                last_progress = time.monotonic(); stall_reported = False
+            # =============================================================
+            # BƯỚC 1: Xử lý các trạng thái hoàn thành / chuyển tiếp ưu tiên cao
+            # (Phải kiểm tra TRƯỚC để tránh kẹt khi quiz đã xong mà câu hỏi vẫn còn trên DOM)
+            # =============================================================
+
+            # 1.1. Nút "Trang sau" trong Dialog (khi quiz đã hoàn thành, xuất hiện nút xanh lá):
+            dialog_next_btn = get_dialog_next_page_button(page)
+            if dialog_next_btn:
+                print("[Done] Phát hiện nút 'Trang sau' trong popup quiz, đang chuyển slide...")
+                safe_click(dialog_next_btn)
+                try:
+                    dialog_next_btn.wait_for(state="hidden", timeout=3000)
+                except PlaywrightError:
+                    pass
+                page.wait_for_timeout(300)
+                last_progress = time.monotonic()
+                stall_reported = False
                 continue
 
-            # Tín hiệu CHÍNH để trả lời: các đáp án đã hiện hay chưa.
-            # (Không phụ thuộc vào selector text câu hỏi vốn dễ vỡ.)
-            answers_visible = safe_is_visible(answers_locator.first)
+            # 1.2. Nút "Bỏ qua" đếm ngược (khi trả lời đúng và EDUX đếm ngược 3-5s):
+            skip_btn = get_dialog_skip_button(page)
+            if skip_btn:
+                print("[Done] Bấm nút 'Bỏ qua' (Skip Countdown)...")
+                safe_click(skip_btn)
+                try:
+                    skip_btn.wait_for(state="hidden", timeout=1500)
+                except PlaywrightError:
+                    pass
+                page.wait_for_timeout(200)
+                d_next = get_dialog_next_page_button(page)
+                if d_next:
+                    print("[Done] Bấm tiếp 'Trang sau' sau khi bỏ qua...")
+                    safe_click(d_next)
+                    try:
+                        d_next.wait_for(state="hidden", timeout=3000)
+                    except PlaywrightError:
+                        pass
+                last_progress = time.monotonic()
+                stall_reported = False
+                continue
+
+            # 1.3. Nút "Câu tiếp theo" (bài quiz có nhiều câu hỏi):
+            next_q_btn = get_dialog_next_question_button(page)
+            if next_q_btn:
+                print("[Done] Chuyển 'Câu tiếp theo'...")
+                safe_click(next_q_btn)
+                try:
+                    next_q_btn.wait_for(state="hidden", timeout=3000)
+                except PlaywrightError:
+                    pass
+                page.wait_for_timeout(300)
+                last_progress = time.monotonic()
+                stall_reported = False
+                continue
+
+            # 1.4. Nút "Thử lại" (khi trả lời sai):
+            retry_btn = get_dialog_retry_button(page)
+            if retry_btn:
+                print("[INFO] Phát hiện nút 'Thử lại', chuẩn bị thử lại câu hỏi...")
+                revealed_idx = extract_revealed_correct_index(page)
+                if revealed_idx is not None:
+                    q_text = get_question_text(page, get_answers_locator(page))
+                    known_correct_answers[q_text] = revealed_idx
+                    print(f"[Revealed] Ghi nhớ đáp án đúng: #{revealed_idx + 1}")
+                safe_click(retry_btn)
+                try:
+                    retry_btn.wait_for(state="hidden", timeout=5000)
+                except PlaywrightError:
+                    pass
+                page.wait_for_timeout(300)
+                last_progress = time.monotonic()
+                stall_reported = False
+                continue
+
+            # 1.5. Slide không có câu hỏi -> sang trang kế tiếp:
+            no_question_btn = find_action_button(page, ["Không có câu hỏi"], must_be_enabled=False)
+            if no_question_btn:
+                print("[INFO] Slide không có câu hỏi -> Chuyển slide tiếp theo")
+                safe_next_slide(page)
+                try:
+                    no_question_btn.wait_for(state="hidden", timeout=1500)
+                except PlaywrightError:
+                    pass
+                page.wait_for_timeout(300)
+                last_progress = time.monotonic()
+                stall_reported = False
+                continue
+
+            # =============================================================
+            # BƯỚC 2: Kiểm tra trạng thái slide / mở popup câu hỏi
+            # =============================================================
+            answers_locator = get_answers_locator(page)
+            answer_count = answers_locator.count()
+            answers_visible = answer_count > 0 and safe_is_visible(answers_locator.first)
 
             if not answers_visible:
-                # Chưa có đáp án: nếu có nút "Trả lời trên lớp" thì mở khung trả lời.
-                if safe_is_visible(answer_button):
+                # 2.1. Mở popup câu hỏi nếu có nút "Trả lời trên lớp" hoặc "Hỏi trên lớp"
+                answer_button = find_action_button(page, ["Trả lời trên lớp", "Hỏi trên lớp"])
+                if answer_button:
+                    print("[INFO] Bấm mở popup câu hỏi...")
                     safe_click(answer_button)
-                    last_progress = time.monotonic(); stall_reported = False
+                    page.wait_for_timeout(500)
+                    last_progress = time.monotonic()
+                    stall_reported = False
                     continue
-                # Không có gì để làm → chờ ngắn. Nếu kẹt quá lâu, báo lý do 1 lần.
+
+                # 2.2. Nếu slide đang tải câu hỏi ("Đang kiểm tra...")
+                if page.locator("text='Đang kiểm tra...'").count() > 0:
+                    page.wait_for_timeout(500)
+                    continue
+
+                # 2.3. Slide đã hoàn thành hoặc không có câu hỏi: nút 'Trang sau' ở slide bar đang ENABLED
+                if not get_active_dialog(page):
+                    slide_next_btn = find_action_button(page, ["Trang sau"], must_be_enabled=True)
+                    if slide_next_btn:
+                        print("[INFO] Bấm 'Trang sau' trên thanh điều khiển slide...")
+                        safe_click(slide_next_btn)
+                        page.wait_for_timeout(500)
+                        last_progress = time.monotonic()
+                        stall_reported = False
+                        continue
+
+                # 2.4. Không có gì để làm -> chờ ngắn. Nếu kẹt quá lâu, tự gỡ kẹt bằng phím ArrowRight
                 if not stall_reported and time.monotonic() - last_progress > STALL_SECONDS:
-                    log_stall_diagnostics(page, all_buttons)
+                    log_stall_diagnostics(page)
+                    if not get_active_dialog(page):
+                        print("[RECOVERY] Thử nhấn phím ArrowRight để chuyển slide...")
+                        page.keyboard.press("ArrowRight")
                     stall_reported = True
+                    last_progress = time.monotonic()
+
                 page.wait_for_timeout(400)
                 continue
 
-            # Có đáp án → đang tiến triển, reset watchdog.
-            last_progress = time.monotonic(); stall_reported = False
+            # =============================================================
+            # BƯỚC 3: Trả lời câu hỏi (Đang có danh sách đáp án hiển thị)
+            # =============================================================
+            last_progress = time.monotonic()
+            stall_reported = False
 
-            answer_count = answers_locator.count()
-            if answer_count == 0:
-                continue
-
-            # Khoá ghi nhớ: ưu tiên text câu hỏi, fallback "vân tay" đáp án khi
-            # selector text câu hỏi không khớp (nguyên nhân hay gây kẹt im lặng).
-            question_text = ""
-            if safe_is_visible(question_locator):
-                try:
-                    question_text = question_locator.inner_text().strip()
-                except PlaywrightError:
-                    question_text = ""
-            if not question_text:
-                question_text = answers_fingerprint(answers_locator) or "?"
+            question_text = get_question_text(page, answers_locator)
             print(f"\n[Q] {question_text[:60]}...")
 
-            tried_indices = wrong_answers.get(question_text, set())
-            # Reset if we tried all
-            if len(tried_indices) >= answer_count:
-                tried_indices.clear()
+            if question_text in known_correct_answers and known_correct_answers[question_text] < answer_count:
+                next_index = known_correct_answers[question_text]
+                print(f"[Pick Known Correct] #{next_index + 1}/{answer_count}")
+            else:
+                tried_indices = wrong_answers.get(question_text, set())
+                if len(tried_indices) >= answer_count:
+                    tried_indices.clear()
+                next_index = next((i for i in range(answer_count) if i not in tried_indices), 0)
+                print(f"[Pick] #{next_index + 1}/{answer_count}")
 
-            next_index = next((i for i in range(answer_count) if i not in tried_indices), 0)
+            # Chọn đáp án
+            option_card = answers_locator.nth(next_index)
+            radio_inside = option_card.locator("button[role='radio']")
+            clicked = False
+            if radio_inside.count() > 0 and safe_is_visible(radio_inside.first):
+                clicked = safe_click(radio_inside.first)
+            if not clicked:
+                clicked = safe_click(option_card)
 
-            print(f"[Pick] #{next_index + 1}/{answer_count}")
-            if not safe_click(answers_locator.nth(next_index)):
-                continue  # đáp án chưa render xong vì lag → thử lại vòng sau
-            if not safe_click(check_button):
+            if not clicked:
                 continue
 
+            page.wait_for_timeout(200)
+
+            # Chờ nút "Kiểm tra" trở thành enabled sau khi chọn đáp án
+            check_button = None
+            for _ in range(10):
+                check_button = find_action_button(page, ["Kiểm tra"], must_be_enabled=True)
+                if check_button:
+                    break
+                page.wait_for_timeout(200)
+
+            if not check_button or not safe_click(check_button):
+                continue
+
+            # =============================================================
+            # BƯỚC 4: Xử lý ngay kết quả sau khi bấm "Kiểm tra"
+            # =============================================================
             try:
                 page.wait_for_function(
                     """
                     () => {
-                      const labels = ['Trang sau', 'Câu tiếp theo', 'Thử lại'];
-                      return labels.some(label => {
-                        const btn = Array.from(document.querySelectorAll('button'))
-                          .find(b => (b.textContent || '').trim() === label);
-                        return btn && !btn.disabled && btn.offsetParent !== null;
+                      const targets = ['Thử lại', 'Bỏ qua', 'Câu tiếp theo', 'Trang sau'];
+                      const buttons = Array.from(document.querySelectorAll('button'));
+                      return buttons.some(b => {
+                        const txt = (b.textContent || '').trim();
+                        const title = b.getAttribute('title') || '';
+                        return targets.some(t => txt.includes(t) || title.includes(t)) && !b.disabled && b.offsetParent !== null;
                       });
                     }
                     """,
                     timeout=10000,
                 )
 
-                if safe_is_visible(next_page_button):
-                    safe_click(next_page_button)
-                    print("[Done] Next Page")
-                    try: next_page_button.wait_for(state="hidden", timeout=1000)
-                    except PlaywrightError: pass
-                elif safe_is_visible(next_button):
+                # 4.1. ƯU TIÊN 1: Nếu trả lời SAI -> nút 'Thử lại' xuất hiện
+                retry_button = get_dialog_retry_button(page)
+                if retry_button:
+                    revealed_idx = extract_revealed_correct_index(page)
+                    if revealed_idx is not None and revealed_idx < answer_count:
+                        known_correct_answers[question_text] = revealed_idx
+                        print(f"[Revealed] Đáp án đúng được hiển thị: #{revealed_idx + 1}")
+                    else:
+                        wrong_answers.setdefault(question_text, set()).add(next_index)
+                        print(f"[Wrong] Index {next_index + 1} marked")
+
+                    safe_click(retry_button)
+                    print("[Retry] Clicked 'Thử lại'")
+                    try:
+                        retry_button.wait_for(state="hidden", timeout=5000)
+                    except PlaywrightError:
+                        pass
+                    last_progress = time.monotonic()
+                    stall_reported = False
+                    continue
+
+                # 4.2. ƯU TIÊN 2: Nút "Bỏ qua" đếm ngược
+                skip_btn = get_dialog_skip_button(page)
+                if skip_btn:
+                    safe_click(skip_btn)
+                    print("[Done] Clicked 'Bỏ qua' (Skip Countdown)")
+                    try:
+                        skip_btn.wait_for(state="hidden", timeout=1500)
+                    except PlaywrightError:
+                        pass
+
+                # 4.3. ƯU TIÊN 3: Nút "Câu tiếp theo"
+                next_button = get_dialog_next_question_button(page)
+                if next_button:
                     safe_click(next_button)
                     print("[Done] Next Question")
-                    try: next_button.wait_for(state="hidden", timeout=1000)
-                    except PlaywrightError: pass
-                elif safe_is_visible(retry_button):
-                    wrong_answers.setdefault(question_text, set()).add(next_index)
-                    print(f"[Wrong] Index {next_index + 1} marked")
-                    safe_click(retry_button)
-                    try: retry_button.wait_for(state="hidden", timeout=1000)
-                    except PlaywrightError: pass
+                    try:
+                        next_button.wait_for(state="hidden", timeout=2000)
+                    except PlaywrightError:
+                        pass
+                    last_progress = time.monotonic()
+                    stall_reported = False
+                    continue
+
+                # 4.4. ƯU TIÊN 4: Nút "Trang sau" trong Dialog
+                dialog_next = get_dialog_next_page_button(page)
+                if dialog_next:
+                    safe_click(dialog_next)
+                    print("[Done] Clicked 'Trang sau' in Dialog")
+                    try:
+                        dialog_next.wait_for(state="hidden", timeout=3000)
+                    except PlaywrightError:
+                        pass
+                    page.wait_for_timeout(300)
+                    last_progress = time.monotonic()
+                    stall_reported = False
+                    continue
+
+                # 4.5. Nút "Trang sau" trên Slide bar (nếu dialog đã tự đóng)
+                slide_next = find_action_button(page, ["Trang sau"], must_be_enabled=True)
+                if slide_next:
+                    safe_click(slide_next)
+                    print("[Done] Clicked 'Trang sau' on Slide")
+                    try:
+                        slide_next.wait_for(state="hidden", timeout=2000)
+                    except PlaywrightError:
+                        pass
+                    last_progress = time.monotonic()
+                    stall_reported = False
+                    continue
+
             except PlaywrightTimeoutError:
-                # Phản hồi tới chậm (lag) hoặc chưa có nút tiếp theo → vòng sau xử lý lại.
-                print("[WARN] Chưa thấy nút tiếp theo (có thể do lag), thử lại...")
+                # Phản hồi tới chậm (lag) hoặc chưa có nút tiếp theo -> vòng sau xử lý lại.
+                print("[WARN] Chưa thấy nút phản hồi sau 'Kiểm tra' (có thể do lag), vòng sau sẽ tự kiểm tra lại...")
             except PlaywrightError:
-                print("[WARN] No follow-up button")
+                print("[WARN] Lỗi khi xử lý nút phản hồi")
 
         except PlaywrightError as e:
             # Lỗi tạm thời ở bất kỳ đâu trong vòng lặp: nghỉ ngắn rồi tiếp tục.
             if page.is_closed():
                 break
             print(f"[WARN] Lỗi tạm thời, tự hồi phục: {str(e)[:80]}")
-            try: page.wait_for_timeout(TRANSIENT_BACKOFF_MS)
-            except PlaywrightError: break
+            try:
+                page.wait_for_timeout(TRANSIENT_BACKOFF_MS)
+            except PlaywrightError:
+                break
 
     try:
         page.wait_for_event("close")

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EDUX Slayers Control</title>
+  <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-badge">⚔️</div>
+        <div>
+          <h1>EDUX Slayers</h1>
+          <span class="version">v1.0.0 • Manifest V3</span>
+        </div>
+      </div>
+      <div class="status-indicator" id="globalStatus">
+        <span class="status-dot"></span>
+        <span class="status-text">Sẵn sàng</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="tab-slide">
+        <span class="tab-icon">⚡</span> Slide Solver
+      </button>
+      <button class="tab-btn" data-tab="tab-test">
+        <span class="tab-icon">📝</span> Test Solver
+      </button>
+      <button class="tab-btn" data-tab="tab-settings">
+        <span class="tab-icon">⚙️</span> Cài đặt
+      </button>
+    </nav>
+
+    <!-- Tab 1: Slide Solver -->
+    <section id="tab-slide" class="tab-content active">
+      <div class="card card-hero">
+        <div class="card-header">
+          <h3>⚡ Tự động giải Slide (Brute-force)</h3>
+          <p class="subtitle">Thử sai thông minh & ghi nhớ đáp án trên các slide bài giảng</p>
+        </div>
+        
+        <div class="stats-grid">
+          <div class="stat-box">
+            <span class="stat-value" id="slideCount">0</span>
+            <span class="stat-label">Câu đã giải</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-value" id="retryCount">0</span>
+            <span class="stat-label">Lần thử sai</span>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="btnStartSlide">
+            <span>▶️</span> Bắt đầu giải Slide
+          </button>
+          <button class="btn btn-danger hidden" id="btnStopSlide">
+            <span>⏹️</span> Dừng lại
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>📋 Nhật ký hoạt động</h4>
+        <div class="log-box" id="slideLog">
+          <div class="log-entry info">Chưa bắt đầu. Mở trang Slide EDUX và bấm 'Bắt đầu'.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Test Solver -->
+    <section id="tab-test" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h3>📝 Giải Bài Kiểm Tra (Test Solver)</h3>
+          <p class="subtitle">Tự động chọn đáp án theo danh sách hoặc trích xuất câu hỏi</p>
+        </div>
+
+        <div class="form-group">
+          <label for="answerInput">Nhập danh sách đáp án (Ví dụ: 1. A, 2. C hoặc JSON):</label>
+          <textarea id="answerInput" placeholder="1. A&#10;2. B&#10;3. C&#10;4. D..." rows="6"></textarea>
+        </div>
+
+        <div class="action-grid">
+          <button class="btn btn-success" id="btnFillAnswers">
+            <span>✨</span> Tự động điền đáp án
+          </button>
+          <button class="btn btn-secondary" id="btnExtractQuestions">
+            <span>📋</span> Trích xuất câu hỏi
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>📊 Kết quả trích xuất / điền bài</h4>
+        <div class="log-box" id="testLog">
+          <div class="log-entry info">Sẵn sàng nhập đáp án hoặc trích xuất đề thi.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Settings -->
+    <section id="tab-settings" class="tab-content">
+      <div class="card">
+        <h3>⚙️ Cấu hình hoạt động</h3>
+
+        <div class="setting-item">
+          <div>
+            <label class="setting-label">Thời gian delay giữa các bước (ms)</label>
+            <span class="setting-desc">Khoảng nghỉ để chờ web load và tránh bị ghi nhận spam</span>
+          </div>
+          <input type="number" id="settingDelay" value="400" min="100" max="3000" step="50">
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <label class="setting-label">Tự động chuyển trang (Next Page)</label>
+            <span class="setting-desc">Tự click nút Trang sau khi giải xong slide</span>
+          </div>
+          <input type="checkbox" id="settingAutoNext" checked>
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <label class="setting-label">Địa chỉ Ollama AI (Tùy chọn)</label>
+            <span class="setting-desc">Địa chỉ local Ollama nếu dùng AI chọn đáp án</span>
+          </div>
+          <input type="text" id="settingOllamaUrl" value="http://localhost:11434">
+        </div>
+
+        <button class="btn btn-primary" id="btnSaveSettings">
+          <span>💾</span> Lưu cài đặt
+        </button>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Quizz Slayers • EDUX Automation</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

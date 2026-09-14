@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "EDUX Slayers Extension",
+  "version": "1.0.0",
+  "description": "Tự động hóa giải Slide bài giảng & Bài kiểm tra trên EDUX (Brute-force + Test Solver + AI)",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://edux.cmcu.edu.vn/*",
+    "*://*.cmcu.edu.vn/*",
+    "http://localhost:11434/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "EDUX Slayers Control"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://edux.cmcu.edu.vn/*",
+        "*://*.cmcu.edu.vn/*",
+        "<all_urls>"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ]
+}
