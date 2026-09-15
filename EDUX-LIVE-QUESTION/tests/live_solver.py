@@ -114,7 +114,8 @@ def test_live_solver(page: Page) -> None:
     else:
         print("\n[INFO] Vui lòng đăng nhập thủ công.")
 
-    show_start_dialog("Mở trang lớp học trực tuyến, sau đó nhấn nút này để bắt đầu tự động trả lời.")
+    # show_start_dialog("Mở trang lớp học trực tuyến, sau đó nhấn nút này để bắt đầu tự động trả lời.")
+    print("\n[INFO] Đã bỏ qua cửa sổ popup, bắt đầu giám sát trực tiếp...")
 
     print("[INFO] Monitoring active-round.txt...")
     last_question_id = None

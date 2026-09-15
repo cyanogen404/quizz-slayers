@@ -3,11 +3,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabContents = document.querySelectorAll('.tab-content');
 
-  tabBtns.forEach(btn => {
+  tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const tabId = btn.getAttribute('data-tab');
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => c.classList.remove('active'));
+      tabBtns.forEach((b) => b.classList.remove('active'));
+      tabContents.forEach((c) => c.classList.remove('active'));
 
       btn.classList.add('active');
       document.getElementById(tabId).classList.add('active');
@@ -25,11 +25,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const answerInput = document.getElementById('answerInput');
   const btnFillAnswers = document.getElementById('btnFillAnswers');
   const btnExtractQuestions = document.getElementById('btnExtractQuestions');
+  const btnAiSolve = document.getElementById('btnAiSolve');
   const testLog = document.getElementById('testLog');
 
   const settingDelay = document.getElementById('settingDelay');
   const settingAutoNext = document.getElementById('settingAutoNext');
   const settingOllamaUrl = document.getElementById('settingOllamaUrl');
+  const settingOllamaModel = document.getElementById('settingOllamaModel');
   const btnSaveSettings = document.getElementById('btnSaveSettings');
 
   // Helper: Append log line
@@ -50,12 +52,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load saved settings
   const settings = await chrome.storage.local.get([
-    'delayMs', 'autoNext', 'ollamaUrl', 'savedAnswers', 'slideStats'
+    'delayMs',
+    'autoNext',
+    'ollamaUrl',
+    'ollamaModel',
+    'savedAnswers',
+    'slideStats'
   ]);
 
   if (settings.delayMs) settingDelay.value = settings.delayMs;
   if (settings.autoNext !== undefined) settingAutoNext.checked = settings.autoNext;
   if (settings.ollamaUrl) settingOllamaUrl.value = settings.ollamaUrl;
+  if (settings.ollamaModel && settingOllamaModel) settingOllamaModel.value = settings.ollamaModel;
   if (settings.savedAnswers) answerInput.value = settings.savedAnswers;
   if (settings.slideStats) {
     slideCount.textContent = settings.slideStats.solved || 0;
@@ -68,21 +76,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     return tab;
   }
 
+  /**
+   * Resilient message sender: auto-injects content script if tab was disconnected
+   */
+  async function sendTabMessage(tabId, message) {
+    try {
+      return await chrome.tabs.sendMessage(tabId, message);
+    } catch (err) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content.js']
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId },
+          files: ['content.css']
+        });
+        await new Promise((r) => setTimeout(r, 250));
+        return await chrome.tabs.sendMessage(tabId, message);
+      } catch (injectErr) {
+        throw err;
+      }
+    }
+  }
+
   // Check state from content script on popup open
   const activeTab = await getActiveTab();
-  if (activeTab && activeTab.url && activeTab.url.includes('cmcu.edu.vn')) {
+  if (activeTab && activeTab.url && (activeTab.url.includes('cmcu.edu.vn') || activeTab.url.includes('edux'))) {
     try {
-      const response = await chrome.tabs.sendMessage(activeTab.id, { action: 'GET_STATUS' });
+      const response = await sendTabMessage(activeTab.id, { action: 'GET_STATUS' });
       if (response && response.isSlideRunning) {
         btnStartSlide.classList.add('hidden');
         btnStopSlide.classList.remove('hidden');
         setStatus('Đang giải Slide...', 'running');
       }
     } catch (e) {
-      addLog(slideLog, 'Hãy tải lại trang EDUX nếu chưa thấy Widget.', 'warn');
+      addLog(slideLog, 'Mở slide hoặc đề thi để bắt đầu.', 'info');
     }
   } else {
-    addLog(slideLog, 'Vui lòng chuyển sang trang EDUX (cmcu.edu.vn) để sử dụng.', 'warn');
+    addLog(slideLog, 'Vui lòng chuyển sang trang EDUX để sử dụng.', 'warn');
   }
 
   // Listen for progress updates from content script
@@ -111,7 +143,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tab = await getActiveTab();
     if (!tab) return;
     try {
-      await chrome.tabs.sendMessage(tab.id, {
+      await sendTabMessage(tab.id, {
         action: 'START_SLIDE_BRUTEFORCE',
         config: {
           delayMs: parseInt(settingDelay.value) || 400,
@@ -123,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       setStatus('Đang giải Slide...', 'running');
       addLog(slideLog, 'Đã kích hoạt giải Slide tự động.', 'success');
     } catch (err) {
-      addLog(slideLog, 'Lỗi: Chưa kết nối được với trang EDUX. Thử F5 lại trang.', 'error');
+      addLog(slideLog, 'Lỗi kết nối với trang EDUX: ' + err.message, 'error');
     }
   });
 
@@ -132,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tab = await getActiveTab();
     if (!tab) return;
     try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'STOP_SLIDE_BRUTEFORCE' });
+      await sendTabMessage(tab.id, { action: 'STOP_SLIDE_BRUTEFORCE' });
       btnStartSlide.classList.remove('hidden');
       btnStopSlide.classList.add('hidden');
       setStatus('Đã dừng', 'stopped');
@@ -157,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       addLog(testLog, 'Đang gửi đáp án tới trang kiểm tra...', 'info');
-      const res = await chrome.tabs.sendMessage(tab.id, {
+      const res = await sendTabMessage(tab.id, {
         action: 'FILL_TEST_ANSWERS',
         answersText: rawAnswers
       });
@@ -178,30 +210,94 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       addLog(testLog, 'Đang quét danh sách câu hỏi...', 'info');
-      const res = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+      const res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
       if (res && (res.promptText || res.questions)) {
         const textToCopy = res.promptText || JSON.stringify(res.questions, null, 2);
         await navigator.clipboard.writeText(textToCopy);
-        addLog(testLog, `Thành công! Đã sao chép prompt câu hỏi vào Clipboard.`, 'success');
+        addLog(testLog, 'Thành công! Đã sao chép prompt câu hỏi vào Clipboard.', 'success');
       } else {
         addLog(testLog, 'Không tìm thấy câu hỏi nào trên trang.', 'warn');
       }
     } catch (err) {
-      addLog(testLog, 'Lỗi trích xuất câu hỏi.', 'error');
+      addLog(testLog, 'Lỗi trích xuất câu hỏi: ' + err.message, 'error');
     }
   });
+
+  // Action: AI Solve via Ollama & Auto-Fill
+  if (btnAiSolve) {
+    btnAiSolve.addEventListener('click', async () => {
+      const tab = await getActiveTab();
+      if (!tab) return;
+
+      try {
+        addLog(testLog, 'Đang trích xuất câu hỏi từ đề thi...', 'info');
+        const res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+        if (!res || !res.promptText) {
+          addLog(testLog, 'Không trích xuất được câu hỏi từ trang này.', 'warn');
+          return;
+        }
+
+        const promptText = res.promptText;
+        const ollamaUrl = settingOllamaUrl.value.trim() || 'http://localhost:11434';
+        const ollamaModel = (settingOllamaModel && settingOllamaModel.value.trim()) || 'hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0';
+
+        addLog(testLog, `Đang gửi đề thi tới Ollama (${ollamaModel}). Vui lòng chờ...`, 'info');
+
+        chrome.runtime.sendMessage(
+          {
+            action: 'FETCH_OLLAMA',
+            url: ollamaUrl,
+            model: ollamaModel,
+            prompt: promptText
+          },
+          async (ollamaRes) => {
+            if (!ollamaRes || !ollamaRes.success) {
+              addLog(testLog, `Lỗi kết nối Ollama: ${ollamaRes?.error || 'Không phản hồi'}. Đã lưu prompt vào Clipboard để bạn tự dán vào AI bên ngoài.`, 'warn');
+              await navigator.clipboard.writeText(promptText);
+              return;
+            }
+
+            const rawAiResponse = (ollamaRes.data && (ollamaRes.data.response || ollamaRes.data.content)) || '';
+            if (!rawAiResponse) {
+              addLog(testLog, 'Ollama trả về nội dung rỗng.', 'warn');
+              return;
+            }
+
+            addLog(testLog, 'Đã nhận đáp án từ AI! Đang tiến hành điền vào bài...', 'success');
+            answerInput.value = rawAiResponse;
+            await chrome.storage.local.set({ savedAnswers: rawAiResponse });
+
+            // Automatically trigger filling
+            const fillRes = await sendTabMessage(tab.id, {
+              action: 'FILL_TEST_ANSWERS',
+              answersText: rawAiResponse
+            });
+
+            if (fillRes && fillRes.success) {
+              addLog(testLog, `🎉 Hoàn tất! AI đã giải và điền ${fillRes.filledCount} câu hỏi!`, 'success');
+            } else {
+              addLog(testLog, `Đã nhận đáp án từ AI. Vui lòng kiểm tra ô đáp án và nhấn Điền thủ công nếu cần.`, 'info');
+            }
+          }
+        );
+      } catch (err) {
+        addLog(testLog, 'Lỗi tiến trình AI: ' + err.message, 'error');
+      }
+    });
+  }
 
   // Action: Save Settings
   btnSaveSettings.addEventListener('click', async () => {
     await chrome.storage.local.set({
       delayMs: parseInt(settingDelay.value) || 400,
       autoNext: settingAutoNext.checked,
-      ollamaUrl: settingOllamaUrl.value.trim()
+      ollamaUrl: settingOllamaUrl.value.trim(),
+      ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : 'hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0'
     });
 
     const tab = await getActiveTab();
     if (tab) {
-      chrome.tabs.sendMessage(tab.id, {
+      sendTabMessage(tab.id, {
         action: 'UPDATE_SETTINGS',
         settings: {
           delayMs: parseInt(settingDelay.value) || 400,

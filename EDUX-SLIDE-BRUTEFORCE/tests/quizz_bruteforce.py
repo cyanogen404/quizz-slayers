@@ -113,6 +113,9 @@ def get_dialog_next_page_button(page: Page):
             loc = page.locator(sel)
             for i in range(loc.count()):
                 btn = loc.nth(i)
+                txt = (btn.inner_text() or "").strip()
+                if any(bad in txt for bad in ["Bài giảng", "Khóa học", "Thử lại", "Bỏ qua", "Phản hồi", "Đổi câu hỏi"]):
+                    continue
                 if safe_is_enabled(btn):
                     return btn
         except PlaywrightError:
@@ -125,6 +128,9 @@ def get_dialog_next_page_button(page: Page):
                 loc = dialog.locator(f"button:has-text('{text}')")
                 for i in range(loc.count()):
                     btn = loc.nth(i)
+                    txt = (btn.inner_text() or "").strip()
+                    if "Bài giảng" in txt:
+                        continue
                     if safe_is_enabled(btn):
                         return btn
             except PlaywrightError:
@@ -134,20 +140,24 @@ def get_dialog_next_page_button(page: Page):
 
 
 def get_dialog_retry_button(page: Page):
-    """Tìm nút 'Thử lại' (trong dialog hoặc trên trang)."""
+    """Tìm nút 'Thử lại' (trong dialog hoặc trên thanh công cụ/trên trang)."""
     selectors = [
         "div[role='dialog'] button:has-text('Thử lại')",
-        "div.sm\\:max-w-\\[100\\%\\] button:has-text('Thử lại')",
         "button:has-text('Thử lại')",
         "button[title*='Thử lại']",
+        "[role='button']:has-text('Thử lại')",
+        "div.cursor-pointer:has-text('Thử lại')",
+        "div:has-text('Thử lại')",
     ]
     for sel in selectors:
         try:
             loc = page.locator(sel)
             for i in range(loc.count()):
                 btn = loc.nth(i)
-                if safe_is_enabled(btn):
-                    return btn
+                txt = (btn.inner_text() or "").strip()
+                if txt in ["Thử lại", "Thử lại câu hỏi"] or len(txt) <= 25:
+                    if safe_is_enabled(btn):
+                        return btn
         except PlaywrightError:
             pass
     return None
@@ -305,8 +315,9 @@ def get_question_text(page: Page, answers_loc) -> str:
 
 
 def extract_revealed_correct_index(page: Page) -> Optional[int]:
-    """Khi trả lời sai, EDUX hiển thị 'Đáp án đúng: X.' trên màn hình.
-    Hàm này bóc tách chữ cái đó để bot lập tức chọn đúng ngay lần thử tiếp theo."""
+    """Khi trả lời sai, EDUX hiển thị 'Đáp án đúng: X.' trên màn hình,
+    hoặc viền xanh lá (border-green / bg-green) vào thẻ đáp án đúng.
+    Hàm này bóc tách chữ cái hoặc thẻ xanh đó để bot lập tức chọn đúng ngay lần thử tiếp theo."""
     selectors = [
         "div.text-red-700:has-text('Đáp án đúng:')",
         "[class*='text-red']:has-text('Đáp án đúng:')",
@@ -324,6 +335,49 @@ def extract_revealed_correct_index(page: Page) -> Optional[int]:
                     return ord(letter) - ord('A')
         except PlaywrightError:
             pass
+
+    # Method 2: Inspect cards for green border/background
+    try:
+        green_idx = page.evaluate("""
+            () => {
+                const isGreen = (el) => {
+                    if (!el) return false;
+                    const cls = el.className || '';
+                    if (typeof cls === 'string') {
+                        if ((cls.includes('border-green') || cls.includes('bg-green') || cls.includes('border-emerald') || cls.includes('bg-emerald')) &&
+                            !cls.includes('border-red') && !cls.includes('bg-red')) {
+                            return true;
+                        }
+                    }
+                    try {
+                        const style = window.getComputedStyle(el);
+                        for (const colorStr of [style.borderColor, style.backgroundColor]) {
+                            const m = (colorStr || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+                            if (m) {
+                                const r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10);
+                                if (g >= 120 && g > r * 1.25 && g > b * 1.1) return true;
+                            }
+                        }
+                    } catch (e) {}
+                    return false;
+                };
+
+                const cards = Array.from(document.querySelectorAll("div.rounded-xl.border-2, div[role='radiogroup'] > div, div.border-2.rounded-xl, div.border-2.cursor-pointer"));
+                for (let i = 0; i < cards.length; i++) {
+                    const c = cards[i];
+                    if (isGreen(c) || c.querySelector("[class*='border-green'], [class*='bg-green'], svg.text-green-500")) {
+                        const red = c.querySelector("[class*='border-red'], [class*='bg-red']");
+                        if (!red) return i;
+                    }
+                }
+                return null;
+            }
+        """)
+        if green_idx is not None and isinstance(green_idx, int):
+            return green_idx
+    except PlaywrightError:
+        pass
+
     return None
 
 
@@ -440,10 +494,8 @@ def test_wait_for_user_login(page: Page) -> None:
             print("\n[INFO] Auto-login attempted. If needed, finish any extra steps in the browser.")
         except PlaywrightError as e:
             print(f"\n[WARN] Tự đăng nhập gặp lỗi ({str(e)[:80]}). Vui lòng đăng nhập thủ công.")
-    else:
-        print("\n[INFO] 'Tự đăng nhập' được chọn. Vui lòng đăng nhập thủ công trên trình duyệt.")
-    
-    show_start_dialog("Khi bạn thấy màn hình slide, chuyển tới slide đang làm mới nhất và nhấn nút dưới đây để bắt đầu tự động trả lời.")
+    # show_start_dialog("Khi bạn thấy màn hình slide, chuyển tới slide đang làm mới nhất và nhấn nút dưới đây để bắt đầu tự động trả lời.")
+    print("\n[INFO] Đã bỏ qua cửa sổ popup, bắt đầu tự động giải slide...")
 
     wrong_answers: dict[str, set[int]] = {}
     known_correct_answers: dict[str, int] = {}
@@ -624,27 +676,34 @@ def test_wait_for_user_login(page: Page) -> None:
 
             page.wait_for_timeout(200)
 
-            # Chờ nút "Kiểm tra" trở thành enabled sau khi chọn đáp án
+            # Chờ nút "Kiểm tra" trở thành enabled sau khi chọn đáp án (nếu có)
+            instant_action = get_dialog_retry_button(page) or get_dialog_next_question_button(page) or get_dialog_skip_button(page)
             check_button = None
-            for _ in range(10):
-                check_button = find_action_button(page, ["Kiểm tra"], must_be_enabled=True)
-                if check_button:
-                    break
-                page.wait_for_timeout(200)
+            if not instant_action:
+                for _ in range(5):
+                    check_button = find_action_button(page, ["Kiểm tra"], must_be_enabled=True)
+                    if check_button:
+                        break
+                    instant_action = get_dialog_retry_button(page) or get_dialog_next_question_button(page) or get_dialog_skip_button(page)
+                    if instant_action:
+                        break
+                    page.wait_for_timeout(200)
 
-            if not check_button or not safe_click(check_button):
-                continue
+            if check_button and safe_is_enabled(check_button):
+                safe_click(check_button)
+            elif not instant_action:
+                print("[INFO] Trắc nghiệm nộp tức thì, đang chờ kết quả...")
 
             # =============================================================
-            # BƯỚC 4: Xử lý ngay kết quả sau khi bấm "Kiểm tra"
+            # BƯỚC 4: Xử lý ngay kết quả sau khi nộp
             # =============================================================
             try:
                 page.wait_for_function(
                     """
                     () => {
                       const targets = ['Thử lại', 'Bỏ qua', 'Câu tiếp theo', 'Trang sau'];
-                      const buttons = Array.from(document.querySelectorAll('button'));
-                      return buttons.some(b => {
+                      const elements = Array.from(document.querySelectorAll("button, a[role='button'], div[role='button'], div.cursor-pointer, [role='button']"));
+                      return elements.some(b => {
                         const txt = (b.textContent || '').trim();
                         const title = b.getAttribute('title') || '';
                         return targets.some(t => txt.includes(t) || title.includes(t)) && !b.disabled && b.offsetParent !== null;
