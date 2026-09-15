@@ -15,8 +15,11 @@ Bộ công cụ tự động hóa giải Slide bài giảng & Bài kiểm tra tr
    - Nhập danh sách đáp án dạng văn bản (`1. A`, `2. C`, `3. B`) hoặc dạng JSON để extension tự động click điền bài kiểm tra.
    - Trích xuất toàn bộ danh sách câu hỏi & đáp án trên trang đề thi vào Clipboard chỉ với 1 click.
 
-3. **🎮 Widget Điều Khiển Trực Tiếp (Injected Floating Panel)**:
-   - Giao diện điều khiển nhanh nổi ngay góc màn hình trang EDUX, giúp Bắt đầu/Dừng trực tiếp không cần mở popup.
+3. **📊 Bảng Điểm & Cảnh Báo Bài Tập AI**:
+   - Tự động lấy điểm số cao nhất của các bài tập (`[Bài tập AI]`) và hiển thị huy hiệu trực tiếp (`🏆 Điểm: X/10`).
+   - Cảnh báo trực quan (`⚠️ Chưa làm`) cho các bài tập chưa nộp để tránh bỏ sót.
+   - Banner tổng quan tiến độ môn học hiển thị ngay đầu danh sách bài học kèm nút cuộn nhanh tới bài chưa làm.
+   - Tab **📊 Điểm số** trong Popup tiện ích giúp theo dõi toàn diện tiến độ của môn học hiện tại.
 
 ---
 
@@ -37,15 +40,21 @@ Bộ công cụ tự động hóa giải Slide bài giảng & Bài kiểm tra tr
 
 ### 1. Giải Slide bài giảng tự động:
 - Đăng nhập vào trang web EDUX trên trình duyệt của bạn như bình thường.
-- Mở slide bài giảng đang làm.
-- Click icon **EDUX Slayers** ⚔️ ở góc trình duyệt (hoặc dùng Widget nổi ở góc dưới màn hình).
+- Mở slide bài giảng đang học.
+- Click icon **EDUX Slayers** ⚔️ ở góc trình duyệt.
 - Nhấn **▶️ Bắt đầu giải Slide**.
 
-### 2. Tự động điền bài kiểm tra:
+### 2. Giải bài kiểm tra (Test Solver):
 - Mở trang bài kiểm tra EDUX.
-- Mở Extension ➔ Chuyển sang Tab **📝 Test Solver**.
-- Nhập/dán đáp án vào ô văn bản (VD: `1. A`, `2. B`, `3. C`).
+- Mở Extension ➔ Chuyển sang Tab **📝 Đề thi**.
+- Nhấn **📋 Trích xuất câu hỏi** để copy câu hỏi vào bộ nhớ tạm (dán vào AI như ChatGPT/Claude để giải).
+- Nhập/dán danh sách đáp án vào ô văn bản (VD: `1. A`, `2. B`, `3. C` hoặc JSON).
 - Nhấn **✨ Tự động điền đáp án**.
+
+### 3. Theo dõi điểm số bài tập:
+- Mở trang môn học EDUX (`/subject?id=...`).
+- Xem điểm số cao nhất và cảnh báo chưa làm ngay bên cạnh các nút `[Bài tập AI]`.
+- Hoặc mở Popup extension ➔ Chuyển sang Tab **📊 Điểm số** để xem thống kê chi tiết.
 
 ---
 

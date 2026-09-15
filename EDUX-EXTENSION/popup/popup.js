@@ -1,41 +1,59 @@
+/**
+ * EDUX Slayers - Popup Controller
+ * Manages extension UI tabs, configuration, slide solver controls,
+ * test auto-fill actions, and exercise score statistics.
+ */
+
 document.addEventListener('DOMContentLoaded', async () => {
-  // Tab switching logic
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.tab-content');
+  // Ordered content scripts for tab re-injection
+  const CONTENT_SCRIPTS = [
+    'scripts/dom-utils.js',
+    'scripts/slide-solver.js',
+    'scripts/test-solver.js',
+    'scripts/score-tracker.js',
+    'content.js'
+  ];
 
-  tabBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
-      tabBtns.forEach((b) => b.classList.remove('active'));
-      tabContents.forEach((c) => c.classList.remove('active'));
+  // =========================================================================
+  // 1. UI Elements Mapping
+  // =========================================================================
+  const UI = {
+    tabs: document.querySelectorAll('.tab-btn'),
+    tabContents: document.querySelectorAll('.tab-content'),
+    globalStatus: document.getElementById('globalStatus'),
 
-      btn.classList.add('active');
-      document.getElementById(tabId).classList.add('active');
-    });
-  });
+    // Slide Solver UI
+    btnStartSlide: document.getElementById('btnStartSlide'),
+    btnStopSlide: document.getElementById('btnStopSlide'),
+    slideCount: document.getElementById('slideCount'),
+    retryCount: document.getElementById('retryCount'),
+    slideLog: document.getElementById('slideLog'),
 
-  // UI Elements
-  const globalStatus = document.getElementById('globalStatus');
-  const btnStartSlide = document.getElementById('btnStartSlide');
-  const btnStopSlide = document.getElementById('btnStopSlide');
-  const slideCount = document.getElementById('slideCount');
-  const retryCount = document.getElementById('retryCount');
-  const slideLog = document.getElementById('slideLog');
+    // Test Solver UI
+    answerInput: document.getElementById('answerInput'),
+    btnFillAnswers: document.getElementById('btnFillAnswers'),
+    btnExtractQuestions: document.getElementById('btnExtractQuestions'),
+    testLog: document.getElementById('testLog'),
 
-  const answerInput = document.getElementById('answerInput');
-  const btnFillAnswers = document.getElementById('btnFillAnswers');
-  const btnExtractQuestions = document.getElementById('btnExtractQuestions');
-  const btnAiSolve = document.getElementById('btnAiSolve');
-  const testLog = document.getElementById('testLog');
+    // Exercise Scores UI
+    scoresSubjectTitle: document.getElementById('scoresSubjectTitle'),
+    scoresCompleted: document.getElementById('scoresCompleted'),
+    scoresHighest: document.getElementById('scoresHighest'),
+    scoresAlertBox: document.getElementById('scoresAlertBox'),
+    btnRefreshScores: document.getElementById('btnRefreshScores'),
+    scoresList: document.getElementById('scoresList'),
 
-  const settingDelay = document.getElementById('settingDelay');
-  const settingAutoNext = document.getElementById('settingAutoNext');
-  const settingOllamaUrl = document.getElementById('settingOllamaUrl');
-  const settingOllamaModel = document.getElementById('settingOllamaModel');
-  const btnSaveSettings = document.getElementById('btnSaveSettings');
+    // Settings UI
+    settingDelay: document.getElementById('settingDelay'),
+    settingAutoNext: document.getElementById('settingAutoNext'),
+    btnSaveSettings: document.getElementById('btnSaveSettings')
+  };
 
-  // Helper: Append log line
+  // =========================================================================
+  // 2. Logging & Status Helpers
+  // =========================================================================
   function addLog(container, message, type = 'info') {
+    if (!container) return;
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
     const timeStr = new Date().toLocaleTimeString('vi-VN', { hour12: false });
@@ -44,61 +62,78 @@ document.addEventListener('DOMContentLoaded', async () => {
     container.scrollTop = container.scrollHeight;
   }
 
-  // Helper: Update status badge
   function setStatus(text, state = 'idle') {
-    globalStatus.className = `status-indicator ${state}`;
-    globalStatus.querySelector('.status-text').textContent = text;
+    if (!UI.globalStatus) return;
+    UI.globalStatus.className = `status-indicator ${state}`;
+    const textEl = UI.globalStatus.querySelector('.status-text');
+    if (textEl) textEl.textContent = text;
   }
 
-  // Load saved settings
-  const settings = await chrome.storage.local.get([
-    'delayMs',
-    'autoNext',
-    'ollamaUrl',
-    'ollamaModel',
-    'savedAnswers',
-    'slideStats'
-  ]);
-
-  if (settings.delayMs) settingDelay.value = settings.delayMs;
-  else settingDelay.value = 100;
-  if (settings.autoNext !== undefined) settingAutoNext.checked = settings.autoNext;
-  if (settings.ollamaUrl) settingOllamaUrl.value = settings.ollamaUrl;
-  if (settings.ollamaModel && settingOllamaModel) settingOllamaModel.value = settings.ollamaModel;
-  if (settings.savedAnswers) answerInput.value = settings.savedAnswers;
-  if (settings.slideStats) {
-    slideCount.textContent = settings.slideStats.solved || 0;
-    retryCount.textContent = settings.slideStats.retries || 0;
-  }
-
-  // Get active tab
+  // =========================================================================
+  // 3. Tab Communication
+  // =========================================================================
   async function getActiveTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     return tab;
   }
 
-  /**
-   * Resilient message sender: auto-injects content script if tab was disconnected
-   */
   async function sendTabMessage(tabId, message) {
     try {
       return await chrome.tabs.sendMessage(tabId, message);
     } catch (err) {
+      // Content script not loaded or tab disconnected: inject required scripts
       try {
         await chrome.scripting.executeScript({
           target: { tabId },
-          files: ['content.js']
+          files: CONTENT_SCRIPTS
         });
         await chrome.scripting.insertCSS({
           target: { tabId },
           files: ['content.css']
         });
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 200));
         return await chrome.tabs.sendMessage(tabId, message);
       } catch (injectErr) {
         throw err;
       }
     }
+  }
+
+  // =========================================================================
+  // 4. Tab Navigation
+  // =========================================================================
+  UI.tabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.getAttribute('data-tab');
+      UI.tabs.forEach((b) => b.classList.remove('active'));
+      UI.tabContents.forEach((c) => c.classList.remove('active'));
+
+      btn.classList.add('active');
+      const targetContent = document.getElementById(tabId);
+      if (targetContent) targetContent.classList.add('active');
+
+      if (tabId === 'tab-scores') {
+        loadExerciseScores();
+      }
+    });
+  });
+
+  // =========================================================================
+  // 5. Load Stored Configuration & Initial State
+  // =========================================================================
+  const settings = await chrome.storage.local.get([
+    'delayMs',
+    'autoNext',
+    'savedAnswers',
+    'slideStats'
+  ]);
+
+  UI.settingDelay.value = settings.delayMs !== undefined ? settings.delayMs : 100;
+  UI.settingAutoNext.checked = settings.autoNext !== undefined ? settings.autoNext : true;
+  if (settings.savedAnswers) UI.answerInput.value = settings.savedAnswers;
+  if (settings.slideStats) {
+    UI.slideCount.textContent = settings.slideStats.solved || 0;
+    UI.retryCount.textContent = settings.slideStats.retries || 0;
   }
 
   // Check state from content script on popup open
@@ -107,79 +142,82 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const response = await sendTabMessage(activeTab.id, { action: 'GET_STATUS' });
       if (response && response.isSlideRunning) {
-        btnStartSlide.classList.add('hidden');
-        btnStopSlide.classList.remove('hidden');
+        UI.btnStartSlide.classList.add('hidden');
+        UI.btnStopSlide.classList.remove('hidden');
         setStatus('Đang giải Slide...', 'running');
       }
     } catch (e) {
-      addLog(slideLog, 'Mở slide hoặc đề thi để bắt đầu.', 'info');
+      addLog(UI.slideLog, 'Mở slide hoặc đề thi để bắt đầu.', 'info');
     }
   } else {
-    addLog(slideLog, 'Vui lòng chuyển sang trang EDUX để sử dụng.', 'warn');
+    addLog(UI.slideLog, 'Vui lòng chuyển sang trang EDUX để sử dụng.', 'warn');
   }
 
   // Listen for progress updates from content script
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'SLIDE_LOG') {
-      addLog(slideLog, msg.message, msg.logType || 'info');
-      if (msg.solvedCount !== undefined) slideCount.textContent = msg.solvedCount;
-      if (msg.retryCount !== undefined) retryCount.textContent = msg.retryCount;
+      addLog(UI.slideLog, msg.message, msg.logType || 'info');
+      if (msg.solvedCount !== undefined) UI.slideCount.textContent = msg.solvedCount;
+      if (msg.retryCount !== undefined) UI.retryCount.textContent = msg.retryCount;
     } else if (msg.type === 'TEST_LOG') {
-      addLog(testLog, msg.message, msg.logType || 'info');
+      addLog(UI.testLog, msg.message, msg.logType || 'info');
     } else if (msg.type === 'SLIDE_STATUS_CHANGE') {
       if (msg.isRunning) {
-        btnStartSlide.classList.add('hidden');
-        btnStopSlide.classList.remove('hidden');
+        UI.btnStartSlide.classList.add('hidden');
+        UI.btnStopSlide.classList.remove('hidden');
         setStatus('Đang giải Slide...', 'running');
       } else {
-        btnStartSlide.classList.remove('hidden');
-        btnStopSlide.classList.add('hidden');
+        UI.btnStartSlide.classList.remove('hidden');
+        UI.btnStopSlide.classList.add('hidden');
         setStatus('Sẵn sàng', 'idle');
       }
     }
   });
 
-  // Action: Start Slide Brute-force
-  btnStartSlide.addEventListener('click', async () => {
+  // =========================================================================
+  // 6. Slide Brute-force Actions
+  // =========================================================================
+  UI.btnStartSlide.addEventListener('click', async () => {
     const tab = await getActiveTab();
     if (!tab) return;
     try {
       await sendTabMessage(tab.id, {
         action: 'START_SLIDE_BRUTEFORCE',
         config: {
-          delayMs: parseInt(settingDelay.value) || 100,
-          autoNext: settingAutoNext.checked
+          delayMs: parseInt(UI.settingDelay.value) || 100,
+          autoNext: UI.settingAutoNext.checked
         }
       });
-      btnStartSlide.classList.add('hidden');
-      btnStopSlide.classList.remove('hidden');
+      UI.btnStartSlide.classList.add('hidden');
+      UI.btnStopSlide.classList.remove('hidden');
       setStatus('Đang giải Slide...', 'running');
-      addLog(slideLog, 'Đã kích hoạt giải Slide tự động.', 'success');
+      addLog(UI.slideLog, 'Đã kích hoạt giải Slide tự động.', 'success');
     } catch (err) {
-      addLog(slideLog, 'Lỗi kết nối với trang EDUX: ' + err.message, 'error');
+      addLog(UI.slideLog, 'Lỗi kết nối với trang EDUX: ' + err.message, 'error');
     }
   });
 
-  // Action: Stop Slide Brute-force
-  btnStopSlide.addEventListener('click', async () => {
+  UI.btnStopSlide.addEventListener('click', async () => {
     const tab = await getActiveTab();
     if (!tab) return;
     try {
       await sendTabMessage(tab.id, { action: 'STOP_SLIDE_BRUTEFORCE' });
-      btnStartSlide.classList.remove('hidden');
-      btnStopSlide.classList.add('hidden');
+      UI.btnStartSlide.classList.remove('hidden');
+      UI.btnStopSlide.classList.add('hidden');
       setStatus('Đã dừng', 'stopped');
-      addLog(slideLog, 'Đã dừng giải Slide.', 'warn');
+      addLog(UI.slideLog, 'Đã dừng giải Slide.', 'warn');
     } catch (err) {
-      addLog(slideLog, 'Không thể dừng tiến trình.', 'error');
+      addLog(UI.slideLog, 'Không thể dừng tiến trình.', 'error');
     }
   });
 
-  // Action: Auto Fill Test Answers
-  btnFillAnswers.addEventListener('click', async () => {
-    const rawAnswers = answerInput.value.trim();
+  // =========================================================================
+  // 7. Test Solver Actions
+  // =========================================================================
+  UI.btnFillAnswers.addEventListener('click', async () => {
+    const rawAnswers = UI.answerInput.value.trim();
     if (!rawAnswers) {
-      addLog(testLog, 'Vui lòng nhập danh sách đáp án trước!', 'warn');
+      addLog(UI.testLog, 'Vui lòng nhập danh sách đáp án trước!', 'warn');
       return;
     }
 
@@ -189,149 +227,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!tab) return;
 
     try {
-      addLog(testLog, 'Đang gửi đáp án tới trang kiểm tra...', 'info');
+      addLog(UI.testLog, 'Đang gửi đáp án tới trang kiểm tra...', 'info');
       const res = await sendTabMessage(tab.id, {
         action: 'FILL_TEST_ANSWERS',
         answersText: rawAnswers
       });
       if (res && res.success) {
-        addLog(testLog, `Hoàn tất! Đã điền ${res.filledCount} câu hỏi.`, 'success');
+        addLog(UI.testLog, `Hoàn tất! Đã điền ${res.filledCount} câu hỏi.`, 'success');
       } else {
-        addLog(testLog, `Thông báo: ${res?.message || 'Không thể điền bài.'}`, 'warn');
+        addLog(UI.testLog, `Thông báo: ${res?.message || 'Không thể điền bài.'}`, 'warn');
       }
     } catch (err) {
-      addLog(testLog, 'Lỗi: Không tìm thấy trang bài kiểm tra EDUX.', 'error');
+      addLog(UI.testLog, 'Lỗi: Không tìm thấy trang bài kiểm tra EDUX.', 'error');
     }
   });
 
-  // Action: Extract Questions to Clipboard
-  btnExtractQuestions.addEventListener('click', async () => {
+  UI.btnExtractQuestions.addEventListener('click', async () => {
     const tab = await getActiveTab();
     if (!tab) return;
 
     try {
-      addLog(testLog, 'Đang quét danh sách câu hỏi...', 'info');
+      addLog(UI.testLog, 'Đang quét danh sách câu hỏi...', 'info');
       const res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
       if (res && (res.promptText || res.questions)) {
         const textToCopy = res.promptText || JSON.stringify(res.questions, null, 2);
         await navigator.clipboard.writeText(textToCopy);
-        addLog(testLog, 'Thành công! Đã sao chép prompt câu hỏi vào Clipboard.', 'success');
+        addLog(UI.testLog, 'Thành công! Đã sao chép prompt câu hỏi vào Clipboard.', 'success');
       } else {
-        addLog(testLog, 'Không tìm thấy câu hỏi nào trên trang.', 'warn');
+        addLog(UI.testLog, 'Không tìm thấy câu hỏi nào trên trang.', 'warn');
       }
     } catch (err) {
-      addLog(testLog, 'Lỗi trích xuất câu hỏi: ' + err.message, 'error');
+      addLog(UI.testLog, 'Lỗi trích xuất câu hỏi: ' + err.message, 'error');
     }
   });
 
-  // Action: AI Solve via Ollama & Auto-Fill
-  if (btnAiSolve) {
-    btnAiSolve.addEventListener('click', async () => {
-      const tab = await getActiveTab();
-      if (!tab) return;
+  // =========================================================================
+  // 8. Settings Actions
+  // =========================================================================
+  UI.btnSaveSettings.addEventListener('click', async () => {
+    const newSettings = {
+      delayMs: parseInt(UI.settingDelay.value) || 100,
+      autoNext: UI.settingAutoNext.checked
+    };
 
-      try {
-        addLog(testLog, 'Đang trích xuất câu hỏi từ đề thi...', 'info');
-        const res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
-        if (!res || !res.promptText) {
-          addLog(testLog, 'Không trích xuất được câu hỏi từ trang này.', 'warn');
-          return;
-        }
-
-        const promptText = res.promptText;
-        const ollamaUrl = settingOllamaUrl.value.trim() || 'http://localhost:11434';
-        const ollamaModel = (settingOllamaModel && settingOllamaModel.value.trim()) || 'hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0';
-
-        addLog(testLog, `Đang gửi đề thi tới Ollama (${ollamaModel}). Vui lòng chờ...`, 'info');
-
-        chrome.runtime.sendMessage(
-          {
-            action: 'FETCH_OLLAMA',
-            url: ollamaUrl,
-            model: ollamaModel,
-            prompt: promptText
-          },
-          async (ollamaRes) => {
-            if (!ollamaRes || !ollamaRes.success) {
-              addLog(testLog, `Lỗi kết nối Ollama: ${ollamaRes?.error || 'Không phản hồi'}. Đã lưu prompt vào Clipboard để bạn tự dán vào AI bên ngoài.`, 'warn');
-              await navigator.clipboard.writeText(promptText);
-              return;
-            }
-
-            const rawAiResponse = (ollamaRes.data && (ollamaRes.data.response || ollamaRes.data.content)) || '';
-            if (!rawAiResponse) {
-              addLog(testLog, 'Ollama trả về nội dung rỗng.', 'warn');
-              return;
-            }
-
-            addLog(testLog, 'Đã nhận đáp án từ AI! Đang tiến hành điền vào bài...', 'success');
-            answerInput.value = rawAiResponse;
-            await chrome.storage.local.set({ savedAnswers: rawAiResponse });
-
-            // Automatically trigger filling
-            const fillRes = await sendTabMessage(tab.id, {
-              action: 'FILL_TEST_ANSWERS',
-              answersText: rawAiResponse
-            });
-
-            if (fillRes && fillRes.success) {
-              addLog(testLog, `🎉 Hoàn tất! AI đã giải và điền ${fillRes.filledCount} câu hỏi!`, 'success');
-            } else {
-              addLog(testLog, `Đã nhận đáp án từ AI. Vui lòng kiểm tra ô đáp án và nhấn Điền thủ công nếu cần.`, 'info');
-            }
-          }
-        );
-      } catch (err) {
-        addLog(testLog, 'Lỗi tiến trình AI: ' + err.message, 'error');
-      }
-    });
-  }
-
-  // Action: Save Settings
-  btnSaveSettings.addEventListener('click', async () => {
-    await chrome.storage.local.set({
-      delayMs: parseInt(settingDelay.value) || 100,
-      autoNext: settingAutoNext.checked,
-      ollamaUrl: settingOllamaUrl.value.trim(),
-      ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : 'hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0'
-    });
+    await chrome.storage.local.set(newSettings);
 
     const tab = await getActiveTab();
     if (tab) {
       sendTabMessage(tab.id, {
         action: 'UPDATE_SETTINGS',
-        settings: {
-          delayMs: parseInt(settingDelay.value) || 100,
-          autoNext: settingAutoNext.checked
-        }
+        settings: newSettings
       }).catch(() => {});
     }
 
-    addLog(slideLog, 'Đã lưu cấu hình mới!', 'success');
+    addLog(UI.slideLog, 'Đã lưu cấu hình mới!', 'success');
   });
 
   // =========================================================================
-  // Exercise Scores UI Handling
+  // 9. Exercise Scores Actions
   // =========================================================================
-  const scoresSubjectTitle = document.getElementById('scoresSubjectTitle');
-  const scoresCompleted = document.getElementById('scoresCompleted');
-  const scoresHighest = document.getElementById('scoresHighest');
-  const scoresAlertBox = document.getElementById('scoresAlertBox');
-  const btnRefreshScores = document.getElementById('btnRefreshScores');
-  const scoresList = document.getElementById('scoresList');
-
   async function loadExerciseScores() {
     const tab = await getActiveTab();
     if (!tab || !tab.url || !tab.url.includes('cmcu.edu.vn')) {
-      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Vui lòng mở trang môn học EDUX';
+      if (UI.scoresSubjectTitle) UI.scoresSubjectTitle.textContent = 'Vui lòng mở trang môn học EDUX';
       return;
     }
 
     try {
-      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Đang quét dữ liệu bài tập...';
+      if (UI.scoresSubjectTitle) UI.scoresSubjectTitle.textContent = 'Đang quét dữ liệu bài tập...';
       const res = await sendTabMessage(tab.id, { action: 'GET_EXERCISE_SCORES' });
       if (!res || !res.success || !Array.isArray(res.models)) {
-        if (scoresSubjectTitle) scoresSubjectTitle.textContent = res?.message || 'Không tìm thấy dữ liệu bài tập.';
+        if (UI.scoresSubjectTitle) UI.scoresSubjectTitle.textContent = res?.message || 'Không tìm thấy dữ liệu bài tập.';
         return;
       }
 
@@ -346,30 +312,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         .filter((s) => !isNaN(s));
       const maxScore = scores.length ? Math.max(...scores).toFixed(2).replace(/\.00$/, '') : '--';
 
-      if (scoresSubjectTitle) {
-        scoresSubjectTitle.textContent = `Môn học: ${res.subjectId ? res.subjectId.slice(0, 8) + '...' : 'Hiện tại'}`;
+      if (UI.scoresSubjectTitle) {
+        UI.scoresSubjectTitle.textContent = `Môn học: ${res.subjectId ? res.subjectId.slice(0, 8) + '...' : 'Hiện tại'}`;
       }
-      if (scoresCompleted) scoresCompleted.textContent = `${completedExams.length}/${totalExams}`;
-      if (scoresHighest) scoresHighest.textContent = maxScore !== '--' ? `${maxScore}/10` : '--';
+      if (UI.scoresCompleted) UI.scoresCompleted.textContent = `${completedExams.length}/${totalExams}`;
+      if (UI.scoresHighest) UI.scoresHighest.textContent = maxScore !== '--' ? `${maxScore}/10` : '--';
 
       // Alert box
-      if (scoresAlertBox) {
+      if (UI.scoresAlertBox) {
         if (pendingExams.length > 0) {
-          scoresAlertBox.style.display = 'block';
-          scoresAlertBox.className = 'log-entry warn';
-          scoresAlertBox.innerHTML = `⚠️ Cảnh báo: Bạn còn <strong>${pendingExams.length}</strong> bài tập chưa có điểm!`;
+          UI.scoresAlertBox.style.display = 'block';
+          UI.scoresAlertBox.className = 'log-entry warn';
+          UI.scoresAlertBox.innerHTML = `⚠️ Cảnh báo: Bạn còn <strong>${pendingExams.length}</strong> bài tập chưa có điểm!`;
         } else if (totalExams > 0) {
-          scoresAlertBox.style.display = 'block';
-          scoresAlertBox.className = 'log-entry success';
-          scoresAlertBox.innerHTML = `🎉 Xuất sắc! Đã hoàn thành 100% bài tập môn này!`;
+          UI.scoresAlertBox.style.display = 'block';
+          UI.scoresAlertBox.className = 'log-entry success';
+          UI.scoresAlertBox.innerHTML = `🎉 Xuất sắc! Đã hoàn thành 100% bài tập môn này!`;
         } else {
-          scoresAlertBox.style.display = 'none';
+          UI.scoresAlertBox.style.display = 'none';
         }
       }
 
-      // Render list
-      if (scoresList) {
-        scoresList.innerHTML = '';
+      // Render exercise list
+      if (UI.scoresList) {
+        UI.scoresList.innerHTML = '';
         examModels.forEach((m) => {
           const item = document.createElement('div');
           const hasScore = m.highest_score !== null && m.highest_score !== undefined;
@@ -391,28 +357,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             </span>
             <span>${scoreText}</span>
           `;
-          scoresList.appendChild(item);
+          UI.scoresList.appendChild(item);
         });
 
         if (examModels.length === 0) {
-          scoresList.innerHTML = '<div class="log-entry info">Môn học này không có bài tập AI.</div>';
+          UI.scoresList.innerHTML = '<div class="log-entry info">Môn học này không có bài tập AI.</div>';
         }
       }
     } catch (err) {
-      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Lỗi kết nối trang EDUX';
-      if (scoresList) scoresList.innerHTML = `<div class="log-entry error">Không thể lấy điểm số: ${err.message}</div>`;
+      if (UI.scoresSubjectTitle) UI.scoresSubjectTitle.textContent = 'Lỗi kết nối trang EDUX';
+      if (UI.scoresList) UI.scoresList.innerHTML = `<div class="log-entry error">Không thể lấy điểm số: ${err.message}</div>`;
     }
   }
 
-  if (btnRefreshScores) {
-    btnRefreshScores.addEventListener('click', loadExerciseScores);
+  if (UI.btnRefreshScores) {
+    UI.btnRefreshScores.addEventListener('click', loadExerciseScores);
   }
-
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (btn.getAttribute('data-tab') === 'tab-scores') {
-        loadExerciseScores();
-      }
-    });
-  });
 });
+

@@ -97,9 +97,6 @@
           <button class="btn btn-secondary" id="btnExtractQuestions">
             <span>📋</span> Trích xuất câu hỏi
           </button>
-          <button class="btn btn-primary" id="btnAiSolve" style="grid-column: span 2;">
-            <span>🤖</span> Giải bằng AI (Ollama) & Điền ngay
-          </button>
         </div>
       </div>
 
@@ -166,22 +163,6 @@
             <span class="setting-desc">Tự click nút Trang sau khi giải xong slide</span>
           </div>
           <input type="checkbox" id="settingAutoNext" checked>
-        </div>
-
-        <div class="setting-item">
-          <div>
-            <label class="setting-label">Địa chỉ Ollama AI (Tùy chọn)</label>
-            <span class="setting-desc">Địa chỉ local Ollama nếu dùng AI chọn đáp án</span>
-          </div>
-          <input type="text" id="settingOllamaUrl" value="http://localhost:11434">
-        </div>
-
-        <div class="setting-item">
-          <div>
-            <label class="setting-label">Tên Model Ollama</label>
-            <span class="setting-desc">Mặc định: hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0</span>
-          </div>
-          <input type="text" id="settingOllamaModel" value="hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0">
         </div>
 
         <button class="btn btn-primary" id="btnSaveSettings">
