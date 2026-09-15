@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   ]);
 
   if (settings.delayMs) settingDelay.value = settings.delayMs;
+  else settingDelay.value = 100;
   if (settings.autoNext !== undefined) settingAutoNext.checked = settings.autoNext;
   if (settings.ollamaUrl) settingOllamaUrl.value = settings.ollamaUrl;
   if (settings.ollamaModel && settingOllamaModel) settingOllamaModel.value = settings.ollamaModel;
@@ -146,7 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await sendTabMessage(tab.id, {
         action: 'START_SLIDE_BRUTEFORCE',
         config: {
-          delayMs: parseInt(settingDelay.value) || 400,
+          delayMs: parseInt(settingDelay.value) || 100,
           autoNext: settingAutoNext.checked
         }
       });
@@ -289,7 +290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Action: Save Settings
   btnSaveSettings.addEventListener('click', async () => {
     await chrome.storage.local.set({
-      delayMs: parseInt(settingDelay.value) || 400,
+      delayMs: parseInt(settingDelay.value) || 100,
       autoNext: settingAutoNext.checked,
       ollamaUrl: settingOllamaUrl.value.trim(),
       ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : 'hf.co/arcee-ai/Arcee-VyLinh-GGUF:Q8_0'
@@ -300,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       sendTabMessage(tab.id, {
         action: 'UPDATE_SETTINGS',
         settings: {
-          delayMs: parseInt(settingDelay.value) || 400,
+          delayMs: parseInt(settingDelay.value) || 100,
           autoNext: settingAutoNext.checked
         }
       }).catch(() => {});

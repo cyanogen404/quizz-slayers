@@ -50,7 +50,7 @@
   const STALL_MS = 8000;
 
   let config = {
-    delayMs: 400,
+    delayMs: 100,
     autoNext: true
   };
 
@@ -659,11 +659,11 @@
   /**
    * Wait until an element becomes hidden or timeout expires.
    */
-  async function waitForHidden(el, timeoutMs = 1500) {
+  async function waitForHidden(el, timeoutMs = 800) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       if (!el || !safeIsVisible(el)) break;
-      await sleep(100);
+      await sleep(25);
     }
   }
 
@@ -683,10 +683,10 @@
       // 1.1: "Trang sau" button in Dialog (quiz completed, green button)
       const dialogNextBtn = getDialogNextPageButton();
       if (dialogNextBtn) {
-        logMessage("[Done] Phát hiện nút 'Trang sau' trong popup quiz, đang chuyển slide...", 'success');
+        logMessage("[Done] 🎉 Phát hiện nút 'Trang sau' hoàn thành quiz, đang chuyển slide...", 'success');
         safeClick(dialogNextBtn);
-        await waitForHidden(dialogNextBtn, 3000);
-        await sleep(300);
+        await waitForHidden(dialogNextBtn, 800);
+        await sleep(50);
         lastProgress = Date.now();
         stallReported = false;
         return scheduleNextStep(config.delayMs);
@@ -697,14 +697,14 @@
       if (skipBtn) {
         logMessage("[Done] Bấm nút 'Bỏ qua' (Skip Countdown)...", 'info');
         safeClick(skipBtn);
-        await waitForHidden(skipBtn, 1500);
-        await sleep(200);
+        await waitForHidden(skipBtn, 600);
+        await sleep(40);
 
         const dNext = getDialogNextPageButton();
         if (dNext) {
           logMessage("[Done] Bấm tiếp 'Trang sau' sau khi bỏ qua...", 'success');
           safeClick(dNext);
-          await waitForHidden(dNext, 3000);
+          await waitForHidden(dNext, 800);
         }
         lastProgress = Date.now();
         stallReported = false;
@@ -716,8 +716,8 @@
       if (nextQBtn) {
         logMessage("[Done] Chuyển 'Câu tiếp theo'...", 'info');
         safeClick(nextQBtn);
-        await waitForHidden(nextQBtn, 3000);
-        await sleep(300);
+        await waitForHidden(nextQBtn, 800);
+        await sleep(50);
         lastProgress = Date.now();
         stallReported = false;
         return scheduleNextStep(config.delayMs);
@@ -735,8 +735,8 @@
           logMessage(`[Revealed] 🎯 Ghi nhớ đáp án đúng: #${revealedIdx + 1}`, 'success');
         }
         safeClick(retryBtn);
-        await waitForHidden(retryBtn, 5000);
-        await sleep(300);
+        await waitForHidden(retryBtn, 1000);
+        await sleep(50);
         lastProgress = Date.now();
         stallReported = false;
         return scheduleNextStep(config.delayMs);
@@ -747,8 +747,8 @@
       if (noQuestionBtn) {
         logMessage('[INFO] Slide không có câu hỏi -> Chuyển slide tiếp theo', 'info');
         safeNextSlide();
-        await waitForHidden(noQuestionBtn, 1500);
-        await sleep(300);
+        await waitForHidden(noQuestionBtn, 800);
+        await sleep(50);
         lastProgress = Date.now();
         stallReported = false;
         return scheduleNextStep(config.delayMs);
@@ -767,7 +767,7 @@
         if (openBtn) {
           logMessage('[INFO] Bấm mở popup câu hỏi...', 'info');
           safeClick(openBtn);
-          await sleep(500);
+          await sleep(150);
           lastProgress = Date.now();
           stallReported = false;
           return scheduleNextStep(config.delayMs);
@@ -778,8 +778,8 @@
           return safeIsVisible(el) && (el.textContent || '').includes('Đang kiểm tra...');
         });
         if (isChecking) {
-          await sleep(500);
-          return scheduleNextStep(300);
+          await sleep(100);
+          return scheduleNextStep(80);
         }
 
         // 2.3: Slide completed or no question: "Trang sau" on slide bar is ENABLED
@@ -788,7 +788,7 @@
           if (slideNextBtn) {
             logMessage("[INFO] Bấm 'Trang sau' trên thanh điều khiển slide...", 'info');
             safeClick(slideNextBtn);
-            await sleep(500);
+            await sleep(150);
             lastProgress = Date.now();
             stallReported = false;
             return scheduleNextStep(config.delayMs);
@@ -808,7 +808,7 @@
           lastProgress = Date.now();
         }
 
-        return scheduleNextStep(400);
+        return scheduleNextStep(100);
       }
 
       // =====================================================================
@@ -819,7 +819,7 @@
       stallReported = false;
 
       const answerCount = answerList.length;
-      if (answerCount === 0) return scheduleNextStep(400);
+      if (answerCount === 0) return scheduleNextStep(100);
 
       const questionText = getSlideQuestionText(answerList);
       logMessage(`[Q] ${questionText.substring(0, 60)}...`, 'info');
@@ -856,20 +856,20 @@
         safeClick(radioInside);
       }
 
-      await sleep(150);
+      await sleep(60);
 
       // Check if clicking the option card already triggered instant submission / completion
       let instantAction = getDialogNextPageButton() || getDialogNextQuestionButton() || getDialogRetryButton() || getDialogSkipButton();
       let checkBtn = null;
 
       if (!instantAction) {
-        // Fast auto-wait for "Kiểm tra" button to become ENABLED (up to 400ms)
-        for (let w = 0; w < 4; w++) {
+        // Fast auto-wait for "Kiểm tra" button to become ENABLED (up to 180ms)
+        for (let w = 0; w < 3; w++) {
           checkBtn = findActionButton(['Kiểm tra'], true);
           if (checkBtn) break;
           instantAction = getDialogNextPageButton() || getDialogNextQuestionButton() || getDialogRetryButton() || getDialogSkipButton();
           if (instantAction) break;
-          await sleep(100);
+          await sleep(60);
         }
 
         if (!checkBtn && !instantAction) {
@@ -892,7 +892,7 @@
       const waitStart = Date.now();
       let handled = false;
 
-      while (Date.now() - waitStart < 4000 && isSlideRunning) {
+      while (Date.now() - waitStart < 2500 && isSlideRunning) {
         // 4.1: Completion button ("Trang sau" / "Tiếp tục" / "Hoàn thành")
         const curDialogNext = getDialogNextPageButton();
         if (curDialogNext) {
@@ -900,8 +900,8 @@
           chrome.storage.local.set({ slideStats: { solved: solvedCount, retries: retryCount } });
           logMessage("[Done] 🎉 Đã hoàn thành quiz trên slide! Bấm 'Trang sau' chuyển tiếp", 'success');
           safeClick(curDialogNext);
-          await waitForHidden(curDialogNext, 1500);
-          await sleep(150);
+          await waitForHidden(curDialogNext, 800);
+          await sleep(50);
           lastProgress = Date.now();
           stallReported = false;
           handled = true;
@@ -915,8 +915,8 @@
           chrome.storage.local.set({ slideStats: { solved: solvedCount, retries: retryCount } });
           logMessage("[Done] Đã giải đúng! Chuyển 'Câu tiếp theo'", 'success');
           safeClick(curNextQ);
-          await waitForHidden(curNextQ, 1500);
-          await sleep(150);
+          await waitForHidden(curNextQ, 800);
+          await sleep(50);
           lastProgress = Date.now();
           stallReported = false;
           handled = true;
@@ -940,8 +940,8 @@
 
           chrome.storage.local.set({ slideStats: { solved: solvedCount, retries: retryCount } });
           safeClick(curRetry);
-          await waitForHidden(curRetry, 2000);
-          await sleep(150);
+          await waitForHidden(curRetry, 1000);
+          await sleep(50);
           lastProgress = Date.now();
           stallReported = false;
           handled = true;
@@ -953,7 +953,7 @@
         if (curSkip) {
           safeClick(curSkip);
           logMessage("[Done] Đã bấm 'Bỏ qua' đếm ngược", 'info');
-          await waitForHidden(curSkip, 1000);
+          await waitForHidden(curSkip, 500);
         }
 
         // 4.5: Next Page button on Slide Bar
@@ -964,8 +964,8 @@
             chrome.storage.local.set({ slideStats: { solved: solvedCount, retries: retryCount } });
             logMessage("[Done] Bấm 'Trang sau' trên Slide", 'success');
             safeClick(curSlideNext);
-            await waitForHidden(curSlideNext, 1500);
-            await sleep(150);
+            await waitForHidden(curSlideNext, 800);
+            await sleep(50);
             lastProgress = Date.now();
             stallReported = false;
             handled = true;
@@ -973,7 +973,7 @@
           }
         }
 
-        await sleep(100);
+        await sleep(35);
       }
 
       if (!handled) {
