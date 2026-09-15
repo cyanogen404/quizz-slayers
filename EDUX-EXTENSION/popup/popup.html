@@ -27,10 +27,13 @@
     <!-- Navigation Tabs -->
     <nav class="tabs">
       <button class="tab-btn active" data-tab="tab-slide">
-        <span class="tab-icon">⚡</span> Slide Solver
+        <span class="tab-icon">⚡</span> Slide
       </button>
       <button class="tab-btn" data-tab="tab-test">
-        <span class="tab-icon">📝</span> Test Solver
+        <span class="tab-icon">📝</span> Đề thi
+      </button>
+      <button class="tab-btn" data-tab="tab-scores">
+        <span class="tab-icon">📊</span> Điểm số
       </button>
       <button class="tab-btn" data-tab="tab-settings">
         <span class="tab-icon">⚙️</span> Cài đặt
@@ -108,7 +111,43 @@
       </div>
     </section>
 
-    <!-- Tab 3: Settings -->
+    <!-- Tab 3: Exercise Scores -->
+    <section id="tab-scores" class="tab-content">
+      <div class="card card-hero">
+        <div class="card-header">
+          <h3>📊 Bảng Điểm & Tiến Độ Bài Tập</h3>
+          <p class="subtitle" id="scoresSubjectTitle">Đang nhận diện môn học...</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <span class="stat-value" id="scoresCompleted">0/0</span>
+            <span class="stat-label">Bài tập đã nộp</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-value" id="scoresHighest">--</span>
+            <span class="stat-label">Điểm cao nhất</span>
+          </div>
+        </div>
+
+        <div id="scoresAlertBox" class="log-entry warn" style="margin-top: 10px; display: none;"></div>
+
+        <div class="action-buttons" style="margin-top: 10px;">
+          <button class="btn btn-secondary" id="btnRefreshScores" style="width: 100%;">
+            <span>🔄</span> Quét lại điểm số môn học
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>📋 Chi tiết từng bài tập</h4>
+        <div class="log-box" id="scoresList" style="max-height: 230px; overflow-y: auto;">
+          <div class="log-entry info">Chưa tải dữ liệu. Mở trang môn học EDUX và bấm 'Quét lại'.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: Settings -->
     <section id="tab-settings" class="tab-content">
       <div class="card">
         <h3>⚙️ Cấu hình hoạt động</h3>

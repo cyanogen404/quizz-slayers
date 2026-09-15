@@ -7,20 +7,46 @@
   if (window.__EDUX_SLAYERS_INTERCEPTOR_ACTIVE__) return;
   window.__EDUX_SLAYERS_INTERCEPTOR_ACTIVE__ = true;
 
-  function broadcastExamPayload(data, sourceUrl) {
+  function broadcastEvent(type, data, sourceUrl) {
     try {
       window.postMessage(
         {
-          type: 'EDUX_EXAM_DATA_CAPTURED',
+          type,
           url: sourceUrl,
           payload: data,
           timestamp: Date.now()
         },
         '*'
       );
-      console.log('[EDUX Slayers Interceptor] Captured exam payload from:', sourceUrl);
+      console.log(`[EDUX Slayers Interceptor] ${type} from:`, sourceUrl);
     } catch (e) {
       // Ignore serialization issues
+    }
+  }
+
+  function broadcastExamPayload(data, sourceUrl) {
+    broadcastEvent('EDUX_EXAM_DATA_CAPTURED', data, sourceUrl);
+  }
+
+  function checkAndBroadcast(data, url) {
+    if (!data || typeof data !== 'object') return;
+    const urlLower = (url || '').toLowerCase();
+
+    // Check subject models API (/api/subjects/{id}/models)
+    if (urlLower.includes('/api/subjects/') && urlLower.includes('/models')) {
+      broadcastEvent('EDUX_MODELS_DATA_CAPTURED', data, url);
+      return;
+    }
+
+    // Check exam history API (/api/exam/history)
+    if (urlLower.includes('/api/exam/history')) {
+      broadcastEvent('EDUX_EXAM_HISTORY_CAPTURED', data, url);
+      return;
+    }
+
+    // Check exam payload for questions
+    if (isExamPayload(data, url)) {
+      broadcastExamPayload(data, url);
     }
   }
 
@@ -52,9 +78,7 @@
         const clone = response.clone();
         const url = (typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '');
         clone.json().then((json) => {
-          if (isExamPayload(json, url)) {
-            broadcastExamPayload(json, url);
-          }
+          checkAndBroadcast(json, url);
         }).catch(() => {});
       } catch (e) {
         // Silent catch
@@ -77,11 +101,9 @@
       try {
         const url = this._edux_url || '';
         const responseText = this.responseText;
-        if (responseText && (url.includes('start') || url.includes('exam') || url.includes('interactive'))) {
+        if (responseText && (url.includes('start') || url.includes('exam') || url.includes('interactive') || url.includes('models'))) {
           const json = JSON.parse(responseText);
-          if (isExamPayload(json, url)) {
-            broadcastExamPayload(json, url);
-          }
+          checkAndBroadcast(json, url);
         }
       } catch (e) {
         // Not JSON or parsing failed

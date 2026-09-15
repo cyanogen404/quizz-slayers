@@ -309,4 +309,110 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     addLog(slideLog, 'Đã lưu cấu hình mới!', 'success');
   });
+
+  // =========================================================================
+  // Exercise Scores UI Handling
+  // =========================================================================
+  const scoresSubjectTitle = document.getElementById('scoresSubjectTitle');
+  const scoresCompleted = document.getElementById('scoresCompleted');
+  const scoresHighest = document.getElementById('scoresHighest');
+  const scoresAlertBox = document.getElementById('scoresAlertBox');
+  const btnRefreshScores = document.getElementById('btnRefreshScores');
+  const scoresList = document.getElementById('scoresList');
+
+  async function loadExerciseScores() {
+    const tab = await getActiveTab();
+    if (!tab || !tab.url || !tab.url.includes('cmcu.edu.vn')) {
+      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Vui lòng mở trang môn học EDUX';
+      return;
+    }
+
+    try {
+      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Đang quét dữ liệu bài tập...';
+      const res = await sendTabMessage(tab.id, { action: 'GET_EXERCISE_SCORES' });
+      if (!res || !res.success || !Array.isArray(res.models)) {
+        if (scoresSubjectTitle) scoresSubjectTitle.textContent = res?.message || 'Không tìm thấy dữ liệu bài tập.';
+        return;
+      }
+
+      const models = res.models;
+      const examModels = models.filter((m) => m.exist_exam);
+      const totalExams = examModels.length;
+      const completedExams = examModels.filter((m) => m.highest_score !== null && m.highest_score !== undefined);
+      const pendingExams = examModels.filter((m) => m.highest_score === null || m.highest_score === undefined);
+
+      const scores = completedExams
+        .map((m) => parseFloat(m.highest_score))
+        .filter((s) => !isNaN(s));
+      const maxScore = scores.length ? Math.max(...scores).toFixed(2).replace(/\.00$/, '') : '--';
+
+      if (scoresSubjectTitle) {
+        scoresSubjectTitle.textContent = `Môn học: ${res.subjectId ? res.subjectId.slice(0, 8) + '...' : 'Hiện tại'}`;
+      }
+      if (scoresCompleted) scoresCompleted.textContent = `${completedExams.length}/${totalExams}`;
+      if (scoresHighest) scoresHighest.textContent = maxScore !== '--' ? `${maxScore}/10` : '--';
+
+      // Alert box
+      if (scoresAlertBox) {
+        if (pendingExams.length > 0) {
+          scoresAlertBox.style.display = 'block';
+          scoresAlertBox.className = 'log-entry warn';
+          scoresAlertBox.innerHTML = `⚠️ Cảnh báo: Bạn còn <strong>${pendingExams.length}</strong> bài tập chưa có điểm!`;
+        } else if (totalExams > 0) {
+          scoresAlertBox.style.display = 'block';
+          scoresAlertBox.className = 'log-entry success';
+          scoresAlertBox.innerHTML = `🎉 Xuất sắc! Đã hoàn thành 100% bài tập môn này!`;
+        } else {
+          scoresAlertBox.style.display = 'none';
+        }
+      }
+
+      // Render list
+      if (scoresList) {
+        scoresList.innerHTML = '';
+        examModels.forEach((m) => {
+          const item = document.createElement('div');
+          const hasScore = m.highest_score !== null && m.highest_score !== undefined;
+          item.className = `log-entry ${hasScore ? 'success' : 'warn'}`;
+          item.style.display = 'flex';
+          item.style.justifyContent = 'space-between';
+          item.style.alignItems = 'center';
+          item.style.gap = '8px';
+
+          const scoreVal = hasScore ? parseFloat(m.highest_score) : null;
+          const scoreDisplay = scoreVal !== null && !isNaN(scoreVal) ? scoreVal.toFixed(2).replace(/\.00$/, '') : m.highest_score;
+          const scoreText = hasScore
+            ? `<strong style="color: #10b981;">🏆 ${scoreDisplay}/10</strong>`
+            : `<span style="color: #f59e0b; font-weight: bold;">⚠️ Chưa làm</span>`;
+
+          item.innerHTML = `
+            <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${m.title}">
+              ${m.title}
+            </span>
+            <span>${scoreText}</span>
+          `;
+          scoresList.appendChild(item);
+        });
+
+        if (examModels.length === 0) {
+          scoresList.innerHTML = '<div class="log-entry info">Môn học này không có bài tập AI.</div>';
+        }
+      }
+    } catch (err) {
+      if (scoresSubjectTitle) scoresSubjectTitle.textContent = 'Lỗi kết nối trang EDUX';
+      if (scoresList) scoresList.innerHTML = `<div class="log-entry error">Không thể lấy điểm số: ${err.message}</div>`;
+    }
+  }
+
+  if (btnRefreshScores) {
+    btnRefreshScores.addEventListener('click', loadExerciseScores);
+  }
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-tab') === 'tab-scores') {
+        loadExerciseScores();
+      }
+    });
+  });
 });
