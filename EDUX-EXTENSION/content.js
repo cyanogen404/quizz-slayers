@@ -48,7 +48,7 @@
         chrome.runtime.sendMessage({
           type: 'EXAM_DATA_READY',
           payload: lastCapturedExamData
-        });
+        }).catch(() => {});
       } catch (e) {}
       console.log('[EDUX Slayers] 📡 Đã tự động bắt được dữ liệu bài tập từ máy chủ EDUX!');
     } else if (event.data.type === 'EDUX_MODELS_DATA_CAPTURED') {
@@ -85,7 +85,12 @@
     } else if (req.action === 'START_EXERCISE') {
       if (window.EduxTestSolver) {
         window.EduxTestSolver.startExercise()
-          .then((res) => sendResponse(res))
+          .then((res) => {
+            if (res && res.questions) {
+              lastCapturedExamData = lastCapturedExamData || res.questions;
+            }
+            sendResponse(res);
+          })
           .catch((err) => sendResponse({ success: false, message: String(err) }));
         return true;
       } else {
@@ -112,13 +117,41 @@
           } catch (e) {}
         }
         const res = window.EduxTestSolver.extractQuestions(lastCapturedExamData);
+        if (res && res.questions) {
+          lastCapturedExamData = lastCapturedExamData || res.questions;
+          chrome.storage.local.set({ lastExamData: lastCapturedExamData });
+        }
         sendResponse(res);
       } else {
         sendResponse({ success: false, message: 'Động cơ giải bài tập chưa sẵn sàng.' });
       }
+    } else if (req.action === 'CHECK_EXAM_OPEN') {
+      const dialog = window.EduxTestSolver?.getActiveExamDialog();
+      sendResponse({ isOpen: !!dialog });
     } else if (req.action === 'GET_STATUS') {
       const status = window.EduxSlideSolver?.getStatus() || { isSlideRunning: false, solvedCount: 0, retryCount: 0 };
-      sendResponse(status);
+      const isExamOpen = !!window.EduxTestSolver?.getActiveExamDialog();
+
+      let examData = null;
+      if (isExamOpen) {
+        examData = lastCapturedExamData || window.EduxTestSolver?.getCapturedExamData();
+        if (!examData) {
+          try {
+            const stored = sessionStorage.getItem('__EDUX_LAST_EXAM_DATA__');
+            if (stored) {
+              examData = JSON.parse(stored);
+              lastCapturedExamData = examData;
+              window.EduxTestSolver?.setCapturedExamData(examData);
+            }
+          } catch (e) {}
+        }
+      }
+
+      sendResponse({
+        ...status,
+        isExamOpen,
+        examData
+      });
     } else if (req.action === 'UPDATE_SETTINGS') {
       window.EduxSlideSolver?.setConfig(req.settings);
       sendResponse({ success: true });

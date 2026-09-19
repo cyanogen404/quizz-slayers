@@ -16,3 +16,20 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Tự động đảm bảo bộ lắng nghe mạng (injected.js) hoạt động trong MAIN world khi trang tải
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (
+    changeInfo.status === 'loading' &&
+    tab.url &&
+    (tab.url.includes('edux.cmcu.edu.vn') || tab.url.includes('cmcu.edu.vn'))
+  ) {
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        files: ['injected.js'],
+        world: 'MAIN'
+      })
+      .catch(() => {});
+  }
+});
+

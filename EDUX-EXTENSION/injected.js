@@ -42,15 +42,25 @@
     if (!data || typeof data !== 'object') return false;
     const urlLower = (url || '').toLowerCase();
 
-    // Loại trừ các API lịch sử hoặc môn học không phải đề bài
-    if (urlLower.includes('/history') || urlLower.includes('/models') || urlLower.includes('/joined')) {
+    // Loại trừ các API lịch sử, models môn học, danh sách tham gia hoặc submit bài
+    if (
+      urlLower.includes('/history') ||
+      urlLower.includes('/models') ||
+      urlLower.includes('/joined') ||
+      urlLower.includes('/submit')
+    ) {
       return false;
+    }
+
+    // 1. Endpoint chứa 'start', 'take', 'begin' (Chuẩn theo Playwright EDUX-TEST-SOLVER: "start" in resp.url)
+    if (urlLower.includes('start') || urlLower.includes('/take') || urlLower.includes('/begin')) {
+      return true;
     }
 
     const d = data.data || data;
     if (!d || typeof d !== 'object') return false;
 
-    // Cấu trúc 1: Chứa exam_data (chuẩn của EDUX-TEST-SOLVER)
+    // 2. Cấu trúc chứa exam_data
     const examData = d.exam_data || d;
     if (examData && typeof examData === 'object') {
       const hasMc = Array.isArray(examData.multiple_choice) && examData.multiple_choice.length > 0;
@@ -63,13 +73,13 @@
       }
     }
 
-    // Cấu trúc 2: Mảng câu hỏi trực tiếp
+    // 3. Mảng câu hỏi trực tiếp
     if (Array.isArray(d) && d.length > 0 && (d[0].question || d[0].so_cau || d[0].options)) {
       return true;
     }
 
-    // Cấu trúc 3: Endpoint chứa 'start' và có title / số câu
-    if (urlLower.includes('start') && (d.title || d.total_questions > 0)) {
+    // 4. Chứa total_questions > 0 hoặc title bài kiểm tra
+    if ((d.total_questions > 0 || data.total_questions > 0) && (d.title || data.title || d.exam_data)) {
       return true;
     }
 
@@ -113,30 +123,23 @@
     window.fetch = async function (...args) {
       const response = await originalFetch.apply(this, args);
       try {
-        const clone = response.clone();
         const resolvedUrl =
           (response && response.url) ||
           (typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '');
 
+        const clone = response.clone();
         clone
-          .json()
-          .then((json) => {
-            checkAndBroadcast(json, resolvedUrl);
+          .text()
+          .then((text) => {
+            if (!text) return;
+            try {
+              const json = JSON.parse(text);
+              checkAndBroadcast(json, resolvedUrl);
+            } catch (e) {}
           })
-          .catch(() => {
-            // Thử đọc dạng text nếu json() báo lỗi
-            clone
-              .text()
-              .then((text) => {
-                try {
-                  const parsed = JSON.parse(text);
-                  checkAndBroadcast(parsed, resolvedUrl);
-                } catch (e) {}
-              })
-              .catch(() => {});
-          });
+          .catch(() => {});
       } catch (e) {
-        // Bỏ qua lỗi stream clone
+        // Bỏ qua lỗi clone
       }
       return response;
     };
@@ -154,7 +157,7 @@
   };
 
   XMLHttpRequest.prototype.send = function (...args) {
-    this.addEventListener('load', function () {
+    const handleResponse = () => {
       try {
         const url = this.responseURL || this._edux_url || '';
         let json = null;
@@ -176,7 +179,9 @@
       } catch (e) {
         // Parsing error or unsupported type
       }
-    });
+    };
+
+    this.addEventListener('load', handleResponse);
     return originalSend.apply(this, args);
   };
 })();

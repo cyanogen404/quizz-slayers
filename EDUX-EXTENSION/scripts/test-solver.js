@@ -214,83 +214,155 @@
   }
 
   /**
-   * Tìm nút "Làm bài tập" hoặc "Bài tập AI" thông minh & toàn diện
+   * Kiểm tra một phần tử có phải là dialog bài tập/câu hỏi thực sự hay không
    */
-  function findStartButton() {
-    // Thu thập tất cả các phần tử có khả năng bấm được
-    const allElements = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
-
-    // Ưu tiên 1: Tìm chính xác nút "Làm bài tập" (màn hình bắt đầu dạng screen_to_start.png)
-    const startMatches = allElements.filter((el) => {
-      if (!safeIsVisible(el)) return false;
-      if (el.children.length > 5) return false;
-      const text = normalizeText(el.textContent);
-      return text.includes('làm bài tập');
-    });
-
-    if (startMatches.length > 0) {
-      const best =
-        startMatches.find((el) => {
-          return (
-            el.tagName === 'BUTTON' ||
-            el.getAttribute('role') === 'button' ||
-            el.tagName === 'A' ||
-            el.classList.contains('cursor-pointer') ||
-            (window.getComputedStyle(el) && window.getComputedStyle(el).cursor === 'pointer')
-          );
-        }) || startMatches[0];
-
-      const clickable =
-        best.closest('button, [role="button"], a, div[class*="cursor-pointer"], div[class*="btn"], div[class*="bg-"]') ||
-        best;
-      return { element: clickable, type: 'start_quiz' };
+  function isExamDialog(el) {
+    if (!el || !safeIsVisible(el)) return false;
+    // Bỏ qua navigation bar, sidebar, header, footer
+    if (el.closest('nav, aside, header, footer') || el.tagName === 'NAV' || el.tagName === 'ASIDE') {
+      return false;
+    }
+    // Bỏ qua nếu đang ở trạng thái closed hoặc aria-hidden
+    if (el.getAttribute('data-state') === 'closed' || el.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    if (el.closest('[data-state="closed"]') || el.closest('[aria-hidden="true"]')) {
+      return false;
     }
 
-    // Ưu tiên 2: Tìm nút "Bài tập AI" của các bài học trên trang môn học (/subject?id=...)
-    const lessonMatches = allElements.filter((el) => {
-      if (!safeIsVisible(el)) return false;
-      if (el.children.length > 5) return false;
-      const text = normalizeText(el.textContent);
-      return text.includes('bài tập ai');
-    });
+    // Phải có ít nhất một dấu hiệu bài tập:
+    // 1. Nhãn "Câu 1", "Câu 2", ...
+    if (findQuestionLabel(el)) return true;
+    // 2. Nút "Nộp bài", "Câu tiếp", "Câu tiếp theo"
+    if (findButtonByText(['Nộp bài', 'Câu tiếp', 'Câu tiếp theo'], el, false)) return true;
+    // 3. Khung lựa chọn trắc nghiệm hoặc khối Đúng/Sai
+    if (
+      el.querySelector(
+        "div.border.border-gray-200.rounded-lg.p-3.bg-gray-50, div[class*='cursor-pointer'][class*='border'], textarea, input[type='text']"
+      )
+    ) {
+      return true;
+    }
 
-    if (lessonMatches.length > 0) {
-      // Ưu tiên bài chưa làm (có badge cảnh báo màu vàng/đỏ)
-      const warningBadge = document.querySelector('.edux-exercise-badge-warning');
-      if (warningBadge) {
-        const row = warningBadge.parentElement;
-        const btnInRow = Array.from(row ? row.querySelectorAll('button, a, div[class*="cursor-pointer"]') : []).find(
-          (b) => normalizeText(b.textContent).includes('bài tập ai')
-        );
-        if (btnInRow && safeIsVisible(btnInRow)) {
-          return { element: btnInRow, type: 'open_lesson_exercise' };
+    return false;
+  }
+
+  /**
+   * Tìm dialog làm bài tập hiện tại (đảm bảo không nhận nhầm sidebar/menu)
+   */
+  function getActiveExamDialog() {
+    const candidateSelectors = [
+      "div[role='dialog'][data-state='open']",
+      "div[role='dialog'][data-slot='dialog-content']",
+      "div[data-slot='dialog-content'][data-state='open']",
+      "div[data-slot='dialog-content']",
+      "div[role='dialog']",
+      "[aria-modal='true']"
+    ];
+
+    for (const sel of candidateSelectors) {
+      try {
+        const els = document.querySelectorAll(sel);
+        for (const el of els) {
+          if (isExamDialog(el)) {
+            return el;
+          }
         }
+      } catch (e) {}
+    }
+
+    // Kiểm tra các div fixed / overlay có z-index cao
+    const dialogs = Array.from(document.querySelectorAll('div.fixed, div.absolute')).filter(safeIsVisible);
+    for (const d of dialogs) {
+      const style = window.getComputedStyle(d);
+      if (parseInt(style.zIndex, 10) >= 20 && isExamDialog(d)) {
+        return d;
       }
-
-      const bestLesson =
-        lessonMatches.find((el) => {
-          return (
-            el.tagName === 'BUTTON' ||
-            el.getAttribute('role') === 'button' ||
-            el.tagName === 'A' ||
-            (window.getComputedStyle(el) && window.getComputedStyle(el).cursor === 'pointer')
-          );
-        }) || lessonMatches[0];
-
-      const clickable = bestLesson.closest('button, [role="button"], a') || bestLesson;
-      return { element: clickable, type: 'open_lesson_exercise' };
     }
 
     return null;
   }
 
   /**
-   * Tìm nhãn "Câu X" trong dialog
+   * Tìm nút "Làm bài tập", "Làm lại bài tập", hoặc "Bài tập AI" thông minh & toàn diện
+   */
+  function findStartButton() {
+    // 1. Ưu tiên tìm trực tiếp trong thẻ BUTTON, [role="button"], A
+    const clickables = Array.from(document.querySelectorAll('button, [role="button"], a'));
+    for (const btn of clickables) {
+      if (!safeIsVisible(btn)) continue;
+      if (btn.closest('nav, aside, header')) continue;
+      const text = normalizeText(btn.textContent);
+      if (
+        text.includes('làm bài tập') ||
+        text.includes('làm lại bài tập') ||
+        text.includes('làm lại') ||
+        text.includes('bắt đầu làm bài')
+      ) {
+        return { element: btn, type: 'start_quiz' };
+      }
+    }
+
+    // 2. Tìm qua các thẻ văn bản con (span, p, div) có chứa chữ 'làm bài tập'
+    const textEls = Array.from(document.querySelectorAll('span, p, div, h1, h2, h3, h4, b, strong'));
+    for (const el of textEls) {
+      if (!safeIsVisible(el)) continue;
+      if (el.closest('nav, aside, header')) continue;
+      const text = normalizeText(el.textContent);
+      if (
+        text === 'làm bài tập' ||
+        text === 'làm lại' ||
+        ((text.includes('làm bài tập') || text.includes('làm lại bài tập')) && text.length < 30)
+      ) {
+        const clickable =
+          el.closest('button, [role="button"], a, div[class*="cursor-pointer"], div[class*="btn"], div[class*="bg-"]') ||
+          el;
+        return { element: clickable, type: 'start_quiz' };
+      }
+    }
+
+    // 3. Ưu tiên nút "Bài tập AI" của các bài học trên trang môn học (/subject?id=...)
+    for (const btn of clickables) {
+      if (!safeIsVisible(btn)) continue;
+      if (btn.closest('nav, aside, header')) continue;
+      const text = normalizeText(btn.textContent);
+      if (text.includes('bài tập ai')) {
+        return { element: btn, type: 'open_lesson_exercise' };
+      }
+    }
+
+    const lessonEls = Array.from(document.querySelectorAll('span, p, div'));
+    for (const el of lessonEls) {
+      if (!safeIsVisible(el)) continue;
+      if (el.closest('nav, aside, header')) continue;
+      const text = normalizeText(el.textContent);
+      if (text.includes('bài tập ai') && text.length < 30) {
+        const clickable =
+          el.closest('button, [role="button"], a, div[class*="cursor-pointer"], div[class*="btn"]') || el;
+        return { element: clickable, type: 'open_lesson_exercise' };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Tìm nhãn "Câu X" trong dialog (ưu tiên span theo chuẩn Playwright)
    */
   function findQuestionLabel(container) {
+    const root = container || document;
+    const spans = Array.from(root.querySelectorAll('span')).filter((el) => {
+      if (el.closest('nav, aside, header')) return false;
+      const text = (el.textContent || '').trim();
+      return safeIsVisible(el) && text.length < 40 && QUESTION_LABEL_RE.test(text);
+    });
+    if (spans.length > 0) return spans[0];
+
     return (
-      Array.from(container.querySelectorAll('span, div, p, h3, h4')).find((el) => {
-        return safeIsVisible(el) && QUESTION_LABEL_RE.test((el.textContent || '').trim());
+      Array.from(root.querySelectorAll('p, div, h3, h4, b, strong')).find((el) => {
+        if (el.closest('nav, aside, header')) return false;
+        const text = (el.textContent || '').trim();
+        return safeIsVisible(el) && text.length < 40 && QUESTION_LABEL_RE.test(text);
       }) || null
     );
   }
@@ -422,8 +494,9 @@
     }
 
     // Fallback: Quét trực tiếp từ DOM nếu dialog bài tập đang mở
-    const searchRoot = getActiveDialog() || document;
+    const searchRoot = getActiveExamDialog() || getActiveDialog() || document;
     const questionLabels = Array.from(searchRoot.querySelectorAll('p, div, span, h3, h4')).filter((el) => {
+      if (el.closest('nav, aside, header, footer')) return false;
       return safeIsVisible(el) && QUESTION_LABEL_RE.test((el.textContent || '').trim());
     });
 
@@ -438,6 +511,7 @@
       };
 
       questionLabels.forEach((labelEl) => {
+        if (labelEl.closest('nav, aside, header, footer')) return;
         const qNum = parseQuestionIndex(labelEl.textContent);
         if (qNum === null) return;
 
@@ -502,15 +576,16 @@
    * Bấm nút "Làm bài tập" hoặc "Bài tập AI" trên trang web
    */
   async function startExercise() {
-    // 1. Kiểm tra nếu dialog câu hỏi đã mở sẵn
-    const existingDialog = getActiveDialog();
-    if (existingDialog && safeIsVisible(existingDialog)) {
+    // 1. Kiểm tra nếu dialog câu hỏi ĐÃ thực sự mở sẵn
+    const existingDialog = getActiveExamDialog();
+    if (existingDialog) {
       const qLabel = findQuestionLabel(existingDialog);
       logMessage(
         `Cửa sổ bài tập đã được mở sẵn sàng${qLabel ? ' (' + qLabel.textContent.trim() + ')' : ''}.`,
         'success'
       );
-      return { success: true, opened: true };
+      const extracted = extractQuestions();
+      return { success: true, opened: true, questions: extracted.questions };
     }
 
     // 2. Tìm nút bấm phù hợp
@@ -523,41 +598,86 @@
       return { success: false, message: "Không tìm thấy nút 'Làm bài tập' hoặc 'Bài tập AI' trên trang." };
     }
 
+    // Xóa cache đề cũ để bắt buộc đợi đề mới của bài tập hiện tại
+    currentCapturedExamData = null;
+    try {
+      sessionStorage.removeItem('__EDUX_LAST_EXAM_DATA__');
+      sessionStorage.removeItem('__EDUX_LAST_EXAM_URL__');
+      chrome.storage.local.remove('lastExamData');
+    } catch (e) {}
+
     if (match.type === 'start_quiz') {
       logMessage("Đã tìm thấy nút 'Làm bài tập'. Đang bấm...", 'info');
       safeClick(match.element);
+      try {
+        if (typeof match.element.click === 'function') match.element.click();
+      } catch (e) {}
 
-      // Chờ dialog xuất hiện
-      for (let i = 0; i < 30; i++) {
-        await sleep(200);
-        const dialog = getActiveDialog();
-        if (dialog && safeIsVisible(dialog)) {
+      // Chờ đề bài tập được bắt hoặc dialog xuất hiện (tối đa 12 giây)
+      for (let i = 0; i < 48; i++) {
+        await sleep(250);
+
+        // Kiểm tra xem đã bắt được packet chưa
+        const captured = getCapturedExamData();
+        if (captured) {
+          const compact = buildCompactPromptPayload(captured);
+          logMessage(`🎉 Đã mở bài và bắt được gói tin đề (${compact.total_questions} câu)!`, 'success');
+          return { success: true, opened: true, questions: compact };
+        }
+
+        // Hoặc kiểm tra dialog câu hỏi đã xuất hiện
+        const dialog = getActiveExamDialog();
+        if (dialog) {
           logMessage('🎉 Cửa sổ làm bài tập đã mở thành công!', 'success');
-          return { success: true, opened: true };
+          const extracted = extractQuestions();
+          return { success: true, opened: true, questions: extracted.questions };
+        }
+
+        // Sau 2 giây nếu vẫn chưa mở, thử kích hoạt lại nút bấm
+        if (i === 8 || i === 20) {
+          logMessage("Đang thử kích hoạt lại nút 'Làm bài tập'...", 'info');
+          safeClick(match.element);
+          try {
+            if (typeof match.element.click === 'function') match.element.click();
+          } catch (e) {}
         }
       }
+
       return { success: true, opened: false, message: "Đã bấm 'Làm bài tập', đang chờ hệ thống tải câu hỏi..." };
     }
 
     if (match.type === 'open_lesson_exercise') {
       logMessage("Đã tìm thấy bài học. Bấm 'Bài tập AI' để mở...", 'info');
       safeClick(match.element);
+      try {
+        if (typeof match.element.click === 'function') match.element.click();
+      } catch (e) {}
 
-      // Chờ màn hình có nút "Làm bài tập" xuất hiện (tối đa 4 giây)
-      for (let i = 0; i < 20; i++) {
+      // Chờ màn hình có nút "Làm bài tập" xuất hiện (tối đa 6 giây)
+      for (let i = 0; i < 30; i++) {
         await sleep(200);
         const nextMatch = findStartButton();
         if (nextMatch && nextMatch.type === 'start_quiz') {
           logMessage("Đã mở bài tập! Tiếp tục bấm nút 'Làm bài tập'...", 'info');
           safeClick(nextMatch.element);
+          try {
+            if (typeof nextMatch.element.click === 'function') nextMatch.element.click();
+          } catch (e) {}
 
-          // Chờ dialog làm bài xuất hiện
-          for (let j = 0; j < 30; j++) {
-            await sleep(200);
-            const dialog = getActiveDialog();
-            if (dialog && safeIsVisible(dialog)) {
+          // Chờ dialog làm bài xuất hiện hoặc bắt được gói tin
+          for (let j = 0; j < 48; j++) {
+            await sleep(250);
+            const captured = getCapturedExamData();
+            if (captured) {
+              const compact = buildCompactPromptPayload(captured);
+              logMessage(`🎉 Đã mở bài và bắt được gói tin đề (${compact.total_questions} câu)!`, 'success');
+              return { success: true, opened: true, questions: compact };
+            }
+            const dialog = getActiveExamDialog();
+            if (dialog) {
               logMessage('🎉 Cửa sổ làm bài tập đã mở thành công!', 'success');
-              return { success: true, opened: true };
+              const extracted = extractQuestions();
+              return { success: true, opened: true, questions: extracted.questions };
             }
           }
           return { success: true, opened: true };
@@ -582,11 +702,20 @@
     logMessage(`🚀 Bắt đầu điền ${questionIndices.length} câu trả lời cho bài tập...`, 'info');
 
     // Chờ hoặc lấy dialog bài tập
-    let dialog = getActiveDialog();
-    if (!dialog || !safeIsVisible(dialog)) {
-      for (let wait = 0; wait < 10; wait++) {
+    let dialog = getActiveExamDialog();
+    if (!dialog) {
+      logMessage("Cửa sổ bài tập chưa mở. Đang tự động mở bài tập để điền...", 'info');
+      const startRes = await startExercise();
+      if (startRes && startRes.opened) {
+        await sleep(350);
+        dialog = getActiveExamDialog();
+      }
+    }
+
+    if (!dialog) {
+      for (let wait = 0; wait < 15; wait++) {
         await sleep(200);
-        dialog = getActiveDialog();
+        dialog = getActiveExamDialog() || getActiveDialog();
         if (dialog && safeIsVisible(dialog)) break;
       }
     }
@@ -875,6 +1004,8 @@
     startExercise,
     setCapturedExamData,
     getCapturedExamData,
+    getActiveExamDialog,
+    findStartButton,
     loadAnswersFromInput,
     sanitizeAiResponse,
     buildCompactPromptPayload,

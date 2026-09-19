@@ -115,15 +115,24 @@
   function getActiveDialog() {
     const selectors = [
       "div[role='dialog'][data-state='open']",
+      "div[role='dialog'][data-slot='dialog-content']",
+      "div[data-slot='dialog-content'][data-state='open']",
+      "div[data-slot='dialog-content']",
       "div[role='dialog']",
-      "[aria-modal='true']",
-      "div[data-slot='dialog-content']"
+      "[aria-modal='true']"
     ];
     for (const sel of selectors) {
       try {
         const els = document.querySelectorAll(sel);
         for (const el of els) {
           if (!safeIsVisible(el)) continue;
+          if (el.getAttribute('data-state') === 'closed') continue;
+          if (el.getAttribute('aria-hidden') === 'true') continue;
+          if (el.closest('[data-state="closed"]')) continue;
+          if (el.closest('[aria-hidden="true"]')) continue;
+          if (el.closest('nav, aside, header')) continue;
+          if (el.tagName === 'NAV' || el.tagName === 'ASIDE') continue;
+
           const style = window.getComputedStyle(el);
           if (
             el.getAttribute('role') === 'dialog' ||

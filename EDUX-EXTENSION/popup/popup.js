@@ -119,6 +119,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         await chrome.scripting.executeScript({
           target: { tabId },
+          files: ['injected.js'],
+          world: 'MAIN'
+        }).catch(() => {});
+
+        await chrome.scripting.executeScript({
+          target: { tabId },
           files: CONTENT_SCRIPTS
         });
         await chrome.scripting.insertCSS({
@@ -185,12 +191,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check state from content script on popup open
   const activeTab = await getActiveTab();
   if (activeTab && activeTab.url && (activeTab.url.includes('cmcu.edu.vn') || activeTab.url.includes('edux'))) {
+    // Đảm bảo network interceptor luôn hoạt động trong MAIN world
+    chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      files: ['injected.js'],
+      world: 'MAIN'
+    }).catch(() => {});
+
     try {
       const response = await sendTabMessage(activeTab.id, { action: 'GET_STATUS' });
-      if (response && response.isSlideRunning) {
-        UI.btnStartSlide.classList.add('hidden');
-        UI.btnStopSlide.classList.remove('hidden');
-        setStatus('Đang giải Slide...', 'running');
+      if (response) {
+        if (response.isSlideRunning) {
+          UI.btnStartSlide.classList.add('hidden');
+          UI.btnStopSlide.classList.remove('hidden');
+          setStatus('Đang giải Slide...', 'running');
+        }
+        if (response.examData) {
+          updateExamInfoUI(response.examData);
+        }
       }
     } catch (e) {
       addLog(UI.slideLog, 'Mở slide hoặc bài tập để bắt đầu.', 'info');
@@ -345,7 +363,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         addLog(UI.testLog, "Đang tìm nút 'Làm bài tập' trên trang...", 'info');
         const res = await sendTabMessage(tab.id, { action: 'START_EXERCISE' });
         if (res && res.success) {
-          addLog(UI.testLog, res.opened ? 'Cửa sổ bài tập đã sẵn sàng!' : 'Đã bấm nút làm bài tập.', 'success');
+          if (res.questions) {
+            updateExamInfoUI(res.questions);
+            addLog(UI.testLog, `🎉 Cửa sổ bài tập đã sẵn sàng (${res.questions.total_questions || 0} câu)!`, 'success');
+          } else {
+            addLog(UI.testLog, res.opened ? 'Cửa sổ bài tập đã sẵn sàng!' : 'Đã bấm nút làm bài tập.', 'success');
+          }
         } else {
           addLog(UI.testLog, res?.message || 'Không tìm thấy nút làm bài tập.', 'warn');
         }
@@ -361,8 +384,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!tab) return;
 
     try {
-      addLog(UI.testLog, 'Đang trích xuất đề bài tập...', 'info');
-      const res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+      // 1. Kiểm tra xem bài tập đã mở trên trang chưa
+      const checkRes = await sendTabMessage(tab.id, { action: 'CHECK_EXAM_OPEN' });
+      let res = null;
+
+      if (!checkRes || !checkRes.isOpen) {
+        addLog(UI.testLog, "Bài tập chưa mở. Đang bấm 'Làm bài tập' và bắt đề...", 'info');
+        const startRes = await sendTabMessage(tab.id, { action: 'START_EXERCISE' });
+        if (startRes && startRes.questions) {
+          res = startRes;
+          updateExamInfoUI(startRes.questions);
+        } else if (!startRes || !startRes.opened) {
+          addLog(UI.testLog, startRes?.message || "Không thể mở bài tập trên trang.", 'warn');
+          return;
+        }
+      }
+
+      // 2. Trích xuất đề nếu chưa có
+      if (!res || !res.promptText) {
+        addLog(UI.testLog, 'Đang trích xuất đề bài tập...', 'info');
+        res = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+      }
+
       if (res && res.promptText) {
         await navigator.clipboard.writeText(res.promptText);
         if (UI.promptPreviewBox) UI.promptPreviewBox.value = res.promptText;
@@ -398,10 +441,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       try {
-        addLog(UI.testLog, 'Đang trích xuất đề bài tập...', 'info');
-        const extRes = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+        // BƯỚC 1: Đảm bảo bài tập được mở trên trang trước khi giải
+        const checkRes = await sendTabMessage(tab.id, { action: 'CHECK_EXAM_OPEN' });
+        let extRes = null;
+
+        if (!checkRes || !checkRes.isOpen) {
+          addLog(UI.testLog, "Bài tập chưa mở. Đang bấm 'Làm bài tập' và bắt đề...", 'info');
+          const startRes = await sendTabMessage(tab.id, { action: 'START_EXERCISE' });
+          if (startRes && startRes.questions) {
+            extRes = startRes;
+            updateExamInfoUI(startRes.questions);
+          } else if (!startRes || !startRes.opened) {
+            addLog(UI.testLog, startRes?.message || "Không thể mở bài tập trên trang.", 'warn');
+            return;
+          }
+        }
+
+        // BƯỚC 2: Trích xuất đề bài tập (nếu chưa có từ startRes)
         if (!extRes || !extRes.promptText) {
-          addLog(UI.testLog, "Không tìm thấy đề bài tập. Hãy mở hoặc bấm 'Mở bài' trước!", 'warn');
+          addLog(UI.testLog, 'Đang trích xuất đề bài tập...', 'info');
+          extRes = await sendTabMessage(tab.id, { action: 'EXTRACT_QUESTIONS' });
+        }
+
+        if (!extRes || !extRes.promptText) {
+          addLog(UI.testLog, "Không tìm thấy đề bài tập. Hãy kiểm tra giao diện bài tập!", 'warn');
           return;
         }
 
@@ -495,6 +558,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!tab) return;
 
     try {
+      // Đảm bảo bài tập đang mở trước khi điền
+      const checkRes = await sendTabMessage(tab.id, { action: 'CHECK_EXAM_OPEN' });
+      if (!checkRes || !checkRes.isOpen) {
+        addLog(UI.testLog, "Đang mở bài tập trên trang để chuẩn bị điền...", 'info');
+        const startRes = await sendTabMessage(tab.id, { action: 'START_EXERCISE' });
+        if (!startRes || !startRes.opened) {
+          addLog(UI.testLog, startRes?.message || "Không thể mở bài tập trên trang.", 'warn');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
       addLog(UI.testLog, 'Đang gửi đáp án tới trang bài tập...', 'info');
       const res = await sendTabMessage(tab.id, {
         action: 'FILL_TEST_ANSWERS',
