@@ -494,8 +494,10 @@ def test_wait_for_user_login(page: Page) -> None:
             print("\n[INFO] Auto-login attempted. If needed, finish any extra steps in the browser.")
         except PlaywrightError as e:
             print(f"\n[WARN] Tự đăng nhập gặp lỗi ({str(e)[:80]}). Vui lòng đăng nhập thủ công.")
-    # show_start_dialog("Khi bạn thấy màn hình slide, chuyển tới slide đang làm mới nhất và nhấn nút dưới đây để bắt đầu tự động trả lời.")
-    print("\n[INFO] Đã bỏ qua cửa sổ popup, bắt đầu tự động giải slide...")
+    else:
+        print("\n[INFO] 'Tự đăng nhập' được chọn. Vui lòng đăng nhập thủ công trên trình duyệt.")
+
+    show_start_dialog("Khi bạn thấy màn hình slide, chuyển tới slide đang làm mới nhất và nhấn nút dưới đây để bắt đầu tự động trả lời.")
 
     wrong_answers: dict[str, set[int]] = {}
     known_correct_answers: dict[str, int] = {}

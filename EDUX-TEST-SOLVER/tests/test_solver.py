@@ -427,11 +427,11 @@ def test_bruteforce(page: Page) -> None:
         page.locator("#email").fill(email)
         page.locator("#password").fill(password)
         page.locator("#password").press("Enter")
+        print("\n[INFO] Auto-login attempted. Finish navigation to the test.")
     else:
         print("\n[INFO] 'Tự đăng nhập' được chọn. Vui lòng đăng nhập thủ công trên trình duyệt.")
 
-    # show_start_dialog("Khi bạn thấy màn hình chuẩn bị làm bài tập, hãy nhấn nút dưới đây để bắt đầu.")
-    print("\n[INFO] Đã bỏ qua cửa sổ popup, bắt đầu làm bài trực tiếp...")
+    show_start_dialog("Khi bạn thấy màn hình chuẩn bị làm bài tập, hãy nhấn nút dưới đây để bắt đầu.")
 
     start_button = page.get_by_role("button", name="Làm bài tập")
 
