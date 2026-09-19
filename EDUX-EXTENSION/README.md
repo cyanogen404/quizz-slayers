@@ -1,6 +1,6 @@
 # ⚔️ EDUX Slayers Browser Extension (Plugin Trình Duyệt)
 
-Bộ công cụ tự động hóa giải Slide bài giảng & Bài kiểm tra trên nền tảng EDUX dưới dạng **Chrome/Edge Extension (Manifest V3)**.
+Bộ công cụ tự động hóa giải Slide bài giảng & Bài tập trên nền tảng EDUX dưới dạng **Chrome/Edge Extension (Manifest V3)**.
 
 ---
 
@@ -11,15 +11,29 @@ Bộ công cụ tự động hóa giải Slide bài giảng & Bài kiểm tra tr
    - Tự động nhận diện các nút: `Trả lời trên lớp`, `Kiểm tra`, `Thử lại`, `Câu tiếp theo`, `Trang sau`.
    - Tự động chuyển trang khi hoàn thành slide hoặc slide không có câu hỏi.
 
-2. **📝 Test Solver (Giải Bài Kiểm Tra)**:
-   - Nhập danh sách đáp án dạng văn bản (`1. A`, `2. C`, `3. B`) hoặc dạng JSON để extension tự động click điền bài kiểm tra.
-   - Trích xuất toàn bộ danh sách câu hỏi & đáp án trên trang đề thi vào Clipboard chỉ với 1 click.
+2. **📝 Test Solver (Tự động giải Bài Tập - Mô phỏng EDUX-TEST-SOLVER)**:
+   - **Tự động bắt đề bài tập**: Lắng nghe phản hồi từ máy chủ khi nhấn nút `Làm bài tập` trên EDUX.
+   - **Chuẩn hóa Prompt câu hỏi**: Cấu trúc JSON gọn gàng kèm hướng dẫn chuẩn format của EDUX-TEST-SOLVER.
+   - **Giải bài bằng AI tích hợp**: Hỗ trợ gọi API Gemini (`gemini-2.0-flash`) hoặc OpenAI (`gpt-4o-mini`) giải trực tiếp chỉ với 1 click (`⚡ Giải AI`).
+   - **Hỗ trợ giải thủ công linh hoạt**:
+     - `📋 Copy Prompt`: Sao chép prompt vào Clipboard để dán vào bất kỳ Chatbot AI nào (ChatGPT, Claude, Gemini).
+     - `📥 Dán Clipboard`: Tự động nạp kết quả trả về từ AI vào ô đáp án.
+   - **Parse đáp án đa định dạng**: Nhận diện JSONL 1 dòng, JSON Array, JSON Object, concatenated JSON `}{`, hoặc dạng văn bản `1. A, 2. B`.
+   - **Điền bài từng bước chuẩn xác**: Tự động nhận diện Đúng/Sai, tự luận, điền ô trống, trắc nghiệm A/B/C/D, chờ chuyển câu và tự động click `Nộp bài`.
 
 3. **📊 Bảng Điểm & Cảnh Báo Bài Tập AI**:
    - Tự động lấy điểm số cao nhất của các bài tập (`[Bài tập AI]`) và hiển thị huy hiệu trực tiếp (`🏆 Điểm: X/10`).
    - Cảnh báo trực quan (`⚠️ Chưa làm`) cho các bài tập chưa nộp để tránh bỏ sót.
    - Banner tổng quan tiến độ môn học hiển thị ngay đầu danh sách bài học kèm nút cuộn nhanh tới bài chưa làm.
    - Tab **📊 Điểm số** trong Popup tiện ích giúp theo dõi toàn diện tiến độ của môn học hiện tại.
+
+4. **🎯 Theo Dõi Tiến Trình Học Phần Trực Quan Từ Bên Ngoài (/student)**:
+   - Hiển thị trực tiếp thanh tiến trình sinh động ngay trên từng thẻ học phần ở trang chủ sinh viên:
+     - 🖥️ **Slide**: Số slide đã đọc / tổng số slide (`X/Y (Z%)`) kèm thanh phần trăm màu xanh.
+     - 📝 **Bài tập**: Số bài tập AI đã làm / tổng số bài tập (`A/B (C%)`) kèm thanh phần trăm màu tím/hồng.
+     - 🏷️ **Huy hiệu thông minh**: `✓ Đã xong 100%` (xanh lá), `⚠️ Còn X bài tập` (đỏ/hồng), `📖 Còn Y slide` (vàng).
+     - Rê chuột vào thẻ để xem tooltip chi tiết: số bài giảng đã xong, điểm số trung bình, điểm cao nhất.
+   - Hỗ trợ xem tổng quan toàn bộ các học phần trong tab **📊 Điểm số** của Popup.
 
 ---
 
@@ -44,12 +58,17 @@ Bộ công cụ tự động hóa giải Slide bài giảng & Bài kiểm tra tr
 - Click icon **EDUX Slayers** ⚔️ ở góc trình duyệt.
 - Nhấn **▶️ Bắt đầu giải Slide**.
 
-### 2. Giải bài kiểm tra (Test Solver):
-- Mở trang bài kiểm tra EDUX.
-- Mở Extension ➔ Chuyển sang Tab **📝 Đề thi**.
-- Nhấn **📋 Trích xuất câu hỏi** để copy câu hỏi vào bộ nhớ tạm (dán vào AI như ChatGPT/Claude để giải).
-- Nhập/dán danh sách đáp án vào ô văn bản (VD: `1. A`, `2. B`, `3. C` hoặc JSON).
-- Nhấn **✨ Tự động điền đáp án**.
+### 2. Giải bài tập (Test Solver):
+- Mở trang bài tập EDUX (hoặc bấm nút `🚀 Mở bài` trên extension).
+- Mở Extension ➔ Chuyển sang Tab **📝 Bài tập**.
+- **Cách 1: Giải tự động hoàn toàn bằng AI (Khuyên dùng)**:
+  - Vào Tab **⚙️ Cài đặt** nhập `API Key` (Google Gemini hoặc OpenAI).
+  - Trở lại Tab **📝 Bài tập** ➔ Bấm **⚡ Giải AI**. Extension sẽ tự lấy đề, gửi AI giải, điền đáp án và nộp bài.
+- **Cách 2: Giải thủ công qua Chatbot AI (ChatGPT/Claude/Gemini web)**:
+  - Bấm **📋 Copy Prompt** để sao chép toàn bộ câu hỏi và lệnh chuẩn vào Clipboard.
+  - Dán vào Chatbot AI trên trình duyệt và gửi.
+  - Sao chép câu trả lời của AI ➔ Trở lại Extension bấm **📥 Dán Clipboard** (hoặc dán tay vào ô).
+  - Bấm **✨ Bắt đầu điền bài tập**.
 
 ### 3. Theo dõi điểm số bài tập:
 - Mở trang môn học EDUX (`/subject?id=...`).

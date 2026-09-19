@@ -15,7 +15,7 @@
         <div class="logo-badge">⚔️</div>
         <div>
           <h1>EDUX Slayers</h1>
-          <span class="version">v1.0.0 • Manifest V3</span>
+          <span class="version">v2.2.0 • Manifest V3</span>
         </div>
       </div>
       <div class="status-indicator" id="globalStatus">
@@ -30,7 +30,7 @@
         <span class="tab-icon">⚡</span> Slide
       </button>
       <button class="tab-btn" data-tab="tab-test">
-        <span class="tab-icon">📝</span> Đề thi
+        <span class="tab-icon">📝</span> Bài tập
       </button>
       <button class="tab-btn" data-tab="tab-scores">
         <span class="tab-icon">📊</span> Điểm số
@@ -77,33 +77,66 @@
       </div>
     </section>
 
-    <!-- Tab 2: Test Solver -->
+    <!-- Tab 2: Test Solver (Bài tập - Mô phỏng EDUX-TEST-SOLVER) -->
     <section id="tab-test" class="tab-content">
-      <div class="card">
+      <div class="card card-hero">
         <div class="card-header">
-          <h3>📝 Giải Bài Kiểm Tra (Test Solver)</h3>
-          <p class="subtitle">Tự động chọn đáp án theo danh sách hoặc trích xuất câu hỏi</p>
+          <h3>📝 Tự động giải Bài Tập (Test Solver)</h3>
+          <p class="subtitle">Mô phỏng EDUX-TEST-SOLVER: Bắt đề bài tập, AI giải & điền đáp án</p>
         </div>
 
+        <!-- Trạng thái bắt đề bài tập -->
+        <div class="exercise-info-box" id="examInfoBox">
+          <span class="exercise-status-dot" id="examStatusDot"></span>
+          <span id="examInfoText" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Chưa bắt được đề. Mở hoặc bấm 'Làm bài tập'.</span>
+        </div>
+
+        <!-- Nút thao tác nhanh -->
+        <div class="action-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+          <button class="btn btn-secondary" id="btnStartExercise" title="Tìm và bấm nút 'Làm bài tập' trên trang">
+            <span>🚀</span> Mở bài
+          </button>
+          <button class="btn btn-secondary" id="btnExtractQuestions" title="Trích xuất đề và copy prompt AI vào clipboard">
+            <span>📋</span> Copy Prompt
+          </button>
+          <button class="btn btn-primary" id="btnSolveAI" style="background: linear-gradient(135deg, #ec4899, #8b5cf6);" title="Gọi AI giải tự động qua API Key">
+            <span>⚡</span> Giải AI
+          </button>
+        </div>
+      </div>
+
+      <!-- Khung xem trước Prompt (Collapsible) -->
+      <div class="card" id="promptPreviewCard" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h4>📄 Prompt câu hỏi chuẩn</h4>
+          <button class="btn-link" id="btnHidePrompt" style="font-size: 11px; background: none; border: none; color: #a5b4fc; cursor: pointer;">Đóng ✕</button>
+        </div>
+        <textarea id="promptPreviewBox" rows="4" readonly style="font-size: 11px; color: #cbd5e1;"></textarea>
+      </div>
+
+      <div class="card">
         <div class="form-group">
-          <label for="answerInput">Nhập danh sách đáp án (Ví dụ: 1. A, 2. C hoặc JSON):</label>
-          <textarea id="answerInput" placeholder="1. A&#10;2. B&#10;3. C&#10;4. D..." rows="6"></textarea>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label for="answerInput">Đáp án (JSONL / JSON / "1. A, 2. B"):</label>
+            <button class="btn-link" id="btnPasteClipboard" style="font-size: 11px; background: none; border: none; color: #34d399; cursor: pointer; font-weight: 600;">📥 Dán Clipboard</button>
+          </div>
+          <textarea id="answerInput" placeholder="Dán kết quả AI vào đây...&#10;Hỗ trợ:&#10;- JSONL / JSON: [{&quot;so_cau&quot;: 1, &quot;dap_an&quot;: &quot;A&quot;}, ...]&#10;- Dạng chữ: 1. A&#10;2. C&#10;3. Đúng, Sai..." rows="5"></textarea>
         </div>
 
         <div class="action-grid">
           <button class="btn btn-success" id="btnFillAnswers">
-            <span>✨</span> Tự động điền đáp án
+            <span>✨</span> Bắt đầu điền bài tập
           </button>
-          <button class="btn btn-secondary" id="btnExtractQuestions">
-            <span>📋</span> Trích xuất câu hỏi
+          <button class="btn btn-secondary" id="btnTogglePrompt">
+            <span>👁️</span> Xem Prompt
           </button>
         </div>
       </div>
 
       <div class="card">
-        <h4>📊 Kết quả trích xuất / điền bài</h4>
+        <h4>📊 Nhật ký bài tập</h4>
         <div class="log-box" id="testLog">
-          <div class="log-entry info">Sẵn sàng nhập đáp án hoặc trích xuất đề thi.</div>
+          <div class="log-entry info">Sẵn sàng. Mở bài tập trên EDUX và chọn thao tác.</div>
         </div>
       </div>
     </section>
@@ -159,10 +192,34 @@
 
         <div class="setting-item">
           <div>
-            <label class="setting-label">Tự động chuyển trang (Next Page)</label>
+            <label class="setting-label">Tự động chuyển slide (Next Page)</label>
             <span class="setting-desc">Tự click nút Trang sau khi giải xong slide</span>
           </div>
           <input type="checkbox" id="settingAutoNext" checked>
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <label class="setting-label">Tự động nộp bài khi làm xong</label>
+            <span class="setting-desc">Tự click 'Nộp bài' ở câu cuối bài tập</span>
+          </div>
+          <input type="checkbox" id="settingAutoSubmit" checked>
+        </div>
+
+        <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+          <div>
+            <label class="setting-label">Khóa API (API Key) giải AI</label>
+            <span class="setting-desc">Google Gemini (AIza...) hoặc OpenAI (sk-...)</span>
+          </div>
+          <input type="password" id="settingApiKey" placeholder="Nhập API Key để giải tự động..." style="width: 100%;">
+        </div>
+
+        <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+          <div>
+            <label class="setting-label">Mô hình AI (Model)</label>
+            <span class="setting-desc">Mặc định: gemini-2.0-flash hoặc gpt-4o-mini</span>
+          </div>
+          <input type="text" id="settingModel" placeholder="gemini-2.0-flash" style="width: 100%;">
         </div>
 
         <button class="btn btn-primary" id="btnSaveSettings">

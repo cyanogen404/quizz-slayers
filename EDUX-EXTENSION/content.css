@@ -126,4 +126,156 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ==========================================================================
+   EDUX Slayers - Course Card Progress Styles on /student
+   ========================================================================== */
+.edux-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-left: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  user-select: none;
+  z-index: 20;
+}
+
+.edux-card-progress:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
+}
+
+.edux-card-progress-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 135px;
+}
+
+.edux-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.edux-stat-val {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 11px;
+}
+
+.edux-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.edux-progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.edux-fill-slide {
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+}
+
+.edux-fill-exam {
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+}
+
+.edux-fill-done {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.edux-badge-complete {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.edux-badge-warning {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  animation: edux-badge-pulse 2.5s infinite ease-in-out;
+}
+
+.edux-badge-slide-warning {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.edux-progress-skeleton {
+  width: 220px;
+  height: 38px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: edux-skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+  margin-left: auto;
+}
+
+@keyframes edux-skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (max-width: 1024px) {
+  .edux-card-progress {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+  .edux-card-progress-stat {
+    min-width: 90px;
+  }
+}
+
+@media (max-width: 768px) {
+  .edux-card-progress {
+    margin-left: 0;
+    margin-top: 8px;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+
 

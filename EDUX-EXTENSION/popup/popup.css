@@ -218,7 +218,7 @@ body {
 /* Buttons */
 .btn {
   width: 100%;
-  padding: 10px 14px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: none;
   font-family: inherit;
@@ -229,7 +229,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .btn-primary {
@@ -298,7 +298,7 @@ body {
 .log-entry.warn { color: #fbbf24; }
 .log-entry.error { color: #f87171; }
 
-/* Settings Form */
+/* Settings & Form */
 .form-group {
   display: flex;
   flex-direction: column;
@@ -311,7 +311,7 @@ label {
   color: var(--text-main);
 }
 
-textarea, input[type="text"], input[type="number"] {
+textarea, input[type="text"], input[type="number"], input[type="password"] {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--bg-card-border);
   border-radius: 8px;
@@ -345,6 +345,46 @@ textarea:focus, input:focus {
   font-size: 10px;
   color: var(--text-muted);
   display: block;
+}
+
+/* Exercise Info Box & Link Button */
+.exercise-info-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.exercise-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.exercise-info-box.active {
+  border-color: rgba(99, 102, 241, 0.4);
+  color: var(--text-main);
+}
+
+.exercise-info-box.active .exercise-status-dot {
+  background-color: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.btn-link {
+  font-family: inherit;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
 }
 
 /* Footer */

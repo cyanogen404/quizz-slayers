@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "EDUX Slayers Extension",
-  "version": "1.0.0",
-  "description": "Tự động hóa giải Slide bài giảng, Bài kiểm tra & Theo dõi điểm số trên EDUX",
+  "version": "2.2.0",
+  "description": "Tự động hóa giải Slide bài giảng, Bài tập & Theo dõi điểm số trên EDUX",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -25,6 +25,15 @@
     "service_worker": "background.js"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "*://edux.cmcu.edu.vn/*",
+        "*://*.cmcu.edu.vn/*"
+      ],
+      "js": ["injected.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "*://edux.cmcu.edu.vn/*",
